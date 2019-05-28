@@ -28,8 +28,6 @@
 #define point3H
 #include <math.h>
 //---------------------------------------------------------------------------
-extern int point3_length_count;
-extern int point3_length2_count;
 
 class Point3{
  public:
@@ -84,12 +82,10 @@ class Point3{
 	}
 
 	inline double length2(void) const {
-		point3_length2_count ++;
 		return m_x * m_x + m_y * m_y + m_z * m_z;
 	}
 
 	inline double length(void) const {
-		point3_length_count ++;
 		return sqrt(length2());
 	}
 
