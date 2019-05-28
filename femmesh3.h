@@ -157,7 +157,7 @@ public:
 
     int discardNodes(void);
 
-    int loadMesh(char *name);
+    int loadMesh(const char *name, vector<double> *cmap = NULL);
     int initMesh(int nnelem);
 
     inline double getSigmaE(int e) {
@@ -208,6 +208,8 @@ protected:
 
     int markNeighborNodes(int nd);
     void limitCoord(double &x, double &y, double &z);
+
+    int parseSigmaLine(const char *buf, int idx, vector<double> *cmap, double *sig);
 
     vector<FENeighbor> m_nbrs; // neighbor info
     vector<Point3> m_nodes;

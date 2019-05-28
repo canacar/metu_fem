@@ -169,9 +169,53 @@ void FENodeInfo::delNeighbor(int nbr)
     elemnbr[n] = elemnbr[--nnbr];
 }
 //---------------------------------------------------------------------------
+int
+FEMesh::parseSigmaLine(const char *buf, int idx, vector<double> *cmap, double *sig)
+{
+	const char *sp;
+	char *ep;
+	double val;
+
+	sp = buf;
+	val = strtod(sp, &ep);
+	if (ep == sp)
+		return 1;
+	if (!isspace(*ep))
+		return 1;
+	if (idx >= 0 && ((int)floor(val) != idx))
+		return 1;
+	for (sp = ep; *sp && isspace(*sp); sp++);
+
+	if (*sp == 0)
+		return 1;
+
+	if (*sp == 'C' || *sp == 'c') {
+		unsigned long ci = strtol(++sp, &ep, 10);
+		if (cmap == NULL || sp == ep) {
+			fprintf(stderr, "invalid label %s [%s]\n", buf, sp);
+			return 1;
+		}
+		if (ci <= 0 || ci > cmap->size()) {
+			fprintf(stderr, "invalid index %ld [1 -- %ld]\n", (long)ci, (long)cmap->size());
+			return 1;
+		}
+		val = (*cmap)[ci - 1];
+	} else {
+		val = strtod(sp, &ep);
+		if (sp == ep) {
+			fprintf(stderr, "Invalid conductivity: %s\n", sp);
+			return 1;
+		}
+	}
+
+	if (sig != NULL)
+		*sig = val;
+
+	return 0;
+}
 //---------------------------------------------------------------------------
 #define MESHBUFSIZE 4096
-int FEMesh::loadMesh(char *name)
+int FEMesh::loadMesh(const char *name, vector<double> *cmap)
 {
     static char buf[MESHBUFSIZE];
     int nn, ne, ns;
@@ -204,6 +248,7 @@ int FEMesh::loadMesh(char *name)
     // reserve space for nodes
     reserveSpace(0, nn);
 
+fprintf(stderr, "loading %d nodes\n", nn);
     for(int n=0; n<nn; n++){
         int i;
         double it, x,y,z;
@@ -251,33 +296,35 @@ int FEMesh::loadMesh(char *name)
 
     // reserve space for elements
     reserveSpace(ne, 0);
-
+fprintf(stderr, "loading %d elements\n", ne);
     for(int n=0; n<ne; n++){
         int i;
-        RElem el;
-        if(fscanf(f, "%d", &i)!=1) return 1;
-        if(i!=(n+1)) return 1;
-        for(int m=0; m<ns; m++){
-            if(fscanf(f,"%d",&i)!=1) return 1;
-            i--;
-            if(i<0 || i>=nn) return 1;
-            el.elem[m]=i+start;
-        }
-#if 0
-	/* XXX reverse for tetgen */
-	int t = el.elem[0];
-	el.elem[0] = el.elem[1];
-	el.elem[1] = t;
-#endif
-        if (addElem(el)) {
-		fprintf(stderr, "Failed to add Element %d!\n", n);
-		return 1;
+	int err = 1;
+	do {
+            RElem el;
+           if(fscanf(f, "%d", &i)!=1) break;
+            if(i!=(n+1)) break;
+            for(int m=0; m<ns; m++){
+                if(fscanf(f,"%d",&i)!=1) break;
+                i--;
+                if(i<0 || i>=nn) break;
+                el.elem[m]=i+start;
+            }
+            if (addElem(el)) {
+	   	    fprintf(stderr, "Failed to add Element %d!\n", n);
+		    return 1;
+	    }
+            fgets(buf,MESHBUFSIZE,f);    // discard to end of line
+	    err = 0;
+	} while (0);
+	if (err) {
+		fprintf(stderr, "Error parsing line %d\n", n + 1);
 	}
-        fgets(buf,MESHBUFSIZE,f);    // discard to end of line
     }
 
     int nsig;
    
+fprintf(stderr, "loading %d sigma\n", ne);
     if(fgets(buf, MESHBUFSIZE, f)==NULL) return 0;     // elem sigma, optional
     if(sscanf(buf, "%d", &nsig)!=1) return 0;
 
@@ -286,12 +333,15 @@ int FEMesh::loadMesh(char *name)
         m_sigelem=new double[ne];
     
         for(int n=0; n<ne; n++){
-            double it, sig;
-            if(fgets(buf, MESHBUFSIZE, f)==NULL) return 1;
-            if(sscanf(buf, "%lg %lg", &it, &sig)!=2) return 1;
-            int i=(int) floor(it);
-            if(it!=it) return 1;
-            if(i!=(n+1)) return 1;
+            double sig;
+            if(fgets(buf, MESHBUFSIZE, f)==NULL) {
+		fprintf(stderr, "failed to read sigma line for element %d\n", n + 1);
+		return 1;
+	    }
+            if (parseSigmaLine(buf, n + 1, cmap, &sig)) {
+		fprintf(stderr, "failed to parse sigma line for element %d\n", n + 1);
+                return 1;
+	    }
             m_sigelem[n]=sig;
         }
 
@@ -304,12 +354,10 @@ int FEMesh::loadMesh(char *name)
         m_signode=new double[nn];
     
         for(int n=0; n<nn; n++){
-            double it, sig;
+            double sig;
             if(fgets(buf, MESHBUFSIZE, f)==NULL) return 1;
-            if(sscanf(buf, "%lg %lg", &it, &sig)!=2) return 1;
-            int i=(int) floor(it);
-            if(it!=it) return 1;
-            if(i!=(n+1)) return 1;
+            if (parseSigmaLine(buf, n + 1, cmap, &sig))
+                return 1;
             m_signode[n]=sig;
         }
     }
@@ -679,8 +727,10 @@ int
 FEMesh::localElem(double &x, double &y, double &z)
 {
 	int n, e0, ni;
+#if 0
 	int num = 0;
 	int max = 0;
+#endif
 	double err, err0 = -1;
 	point pa[NUM_NODES];
 

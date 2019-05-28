@@ -505,14 +505,16 @@ Input parameters include:\n\
   -rfmag         : Compute reciprocal field for magbetic sensors\n\n";
 
 #define MAX_BASE 1024
+#define MAX_COND 100
 
 #undef __FUNCT__
 #define __FUNCT__ "main"
 int
 main(int argc, char **argv)
 {
+	vector<double> cmap;
 	char buf[MAX_BASE];
-	char *mpath;
+	char *mpath, *cond[MAX_COND];
 	char *dfn;
 	char *mfn;
 	char *sfn;
@@ -520,28 +522,62 @@ main(int argc, char **argv)
 	int ierr;
 
 	PetscTruth t, sflag, bsflag, rfpflag, rfmflag;
+	PetscInt cmax;
 
 	PetscInitialize(&argc, &argv, NULL, help);
 
 	ierr = PetscOptionsGetString(PETSC_NULL, "-m", buf, MAX_BASE, &t);
 	CHKERRQ(ierr);
 
-	if ((mpath = strdup(buf)) == NULL) {
-		SETERRQ (PETSC_ERR_MEM, "strdup mpath");
-	}
-	
 	if (!t) {
 		PetscPrintf(PETSC_COMM_WORLD, "%s", help);		
 		my_exit(1);
 	}
-	
+
+	if ((mpath = strdup(buf)) == NULL) {
+		SETERRQ (PETSC_ERR_MEM, "strdup mpath");
+	}
+
+	cmax = MAX_COND; /* maximum 100 distinct conductivity labels supported */
+	ierr = PetscOptionsGetStringArray(PETSC_NULL, "-c", cond, &cmax, &t);
+	CHKERRQ(ierr);
+
+	if (t) {
+		/* XXX TODO Fill cmap */
+		for (int i = 0; i < cmax; i++) {
+			char *p = cond[i];
+			char *ep = NULL;
+			unsigned long ix = strtoul(p, &ep, 10);
+			if (p == ep || ix <= 0 || ix > MAX_COND)
+				SETERRQ (PETSC_ERR_MEM, "invalid conductivity index");
+			if (*ep != '=')
+				SETERRQ (PETSC_ERR_MEM, "expected =");
+			p = ep + 1;
+
+			double v = strtod(p, &ep);
+			if (p == ep || *ep != '\0' || v < 0)
+				SETERRQ (PETSC_ERR_MEM, "invalid conductivity value");
+			if (cmap.size() < ix)
+				cmap.resize(ix, -1);
+			cmap[ix - 1] = v;
+		}
+	}
+
+	for (unsigned int i = 0; i < cmap.size(); i++)
+		PetscPrintf(PETSC_COMM_WORLD, "%d = %g\n", i, cmap[i]);
+
 	/* Initialize Mesh */
 	FEMesh *msh=new FEMesh();
-	if (msh->loadMesh(mpath)) {
+	if (msh->loadMesh(mpath, &cmap)) {
 		PetscPrintf(PETSC_COMM_WORLD, "Failed to load mesh!\n");
 		my_exit(1);
 	}
-	
+
+	for (PetscInt n = 0; n < cmax; n++) {
+		ierr = PetscFree(cond[n]);
+		CHKERRQ(ierr);
+	}
+
 	/* Print Mesh info */
 	PetscPrintf(PETSC_COMM_WORLD, "Mesh initialized\n");
 	PetscPrintf(PETSC_COMM_WORLD, "  %d nodes, %d elements\n",
