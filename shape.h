@@ -93,6 +93,8 @@ public:
 	int MagSecSurf(int surf, const point *pts, const point sens,
 		       double mul, double *mx, double *my, double *mz);
 
+	void Weights(double x, double y, double z, double *w);
+
 protected:
 
 	struct GP3D {

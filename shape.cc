@@ -581,7 +581,7 @@ FEShape::BoundYan(const point D, const point Ji, const point *pts, double *rhs)
 			double tmp=0;
 			for(int jd=0; jd<3; jd++)
 				tmp+=IJ[id][jd] * m_deriv[n][jd];
-				m_cartp[n][id]=tmp;
+			m_cartp[n][id]=tmp;
 		}
 	}
 
@@ -740,3 +740,12 @@ FEShape::MagSecSurf(int surf, const point *pts, const point sens,
 }
 
 
+void
+FEShape::Weights(double x, double y, double z, double *w)
+{
+	
+	Shape(x,y,z);
+
+	for (int n = 0; n < m_numnodes; n++)
+		w[n] = m_shape[n];
+}
