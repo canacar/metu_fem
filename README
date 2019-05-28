@@ -4,7 +4,7 @@ Department of Electrical and Electronics Engineering.
 
 The METU-FEM forward problem solver uses PETSc library as a
 parallel high performance sparse solver. The latest version
-of PETSc at the time of writing is 2.3.3p15 and can be obtained
+of PETSc at the time of writing is 3.1-p7 and can be obtained
 from: http://www.mcs.anl.gov/petsc/
 
 

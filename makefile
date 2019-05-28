@@ -2,14 +2,14 @@
 # make file based on minimum given in the PetSc manual
 
 ALL: forward
-CFLAGS = -Wall -Wshadow
+CFLAGS = -g -Wall -Wshadow 
 FFLAGS =
 CPPFLAGS =
 FPPFLAGS =
 
 FORWARD_SRC = forward.cc shape.cc shape8.cc shape20.cc dmatrix.cc \
               point3.cc femmesh3.cc hptimer.cc engine.cc meshutil.cc \
-	      shape4.cc scache.cc sphere3.cc
+	      shape4.cc shape10.cc scache.cc sphere3.cc
 
 FORWARD_OBJ = ${FORWARD_SRC:cc=o}
 
@@ -18,4 +18,4 @@ include ${PETSC_DIR}/conf/variables
 include ${PETSC_DIR}/conf/rules
 
 forward: ${FORWARD_OBJ} chkopts
-	mpicxx -L/usr/local/lib -o $@ ${FORWARD_OBJ} ${PETSC_LIB} -lz
+	${CLINKER}  -g -L/usr/local/lib -o $@ ${FORWARD_OBJ} ${PETSC_LIB} -lz
