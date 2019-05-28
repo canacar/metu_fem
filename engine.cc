@@ -582,6 +582,9 @@ FEngine::setupSolver(void)
 	PetscInt nn = m_mesh->numNodes();
 	PetscInt nl = PETSC_DECIDE;
 
+	PetscReal rtol, abstol, dtol;
+	PetscInt maxits;
+
 	int sndbuf[m_size];
 	int rcvbuf[m_size];
 
@@ -719,16 +722,13 @@ FEngine::setupSolver(void)
 #ifdef VIEW_AMATRIX
 	PetscViewer viewer;
 
-	ierr = PetscViewerASCIIOpen(m_comm, "Amat", &viewer);
-	CHKERRQ(ierr);
-
-	ierr = PetscViewerSetFormat(viewer, PETSC_VIEWER_ASCII_COMMON);
+	ierr = PetscViewerBinaryOpen(m_comm, "Amat", FILE_MODE_WRITE, &viewer);
 	CHKERRQ(ierr);
 
 	ierr = MatView(m_A, viewer);
 	CHKERRQ(ierr);
 
-	PetscViewerDestroy(viewer);
+	PetscViewerDestroy(&viewer);
 	CHKERRQ(ierr);
 #endif
 
@@ -766,6 +766,12 @@ FEngine::setupSolver(void)
 
 	ierr = KSPSetFromOptions(m_ksp);
 	CHKERRQ(ierr);
+
+	ierr = KSPGetTolerances(m_ksp, &rtol, &abstol, &dtol, &maxits);
+	CHKERRQ(ierr);
+
+	printf("KSP created: rtol:%g, abstol:%g, dtol:%g, maxits:%d\n",
+		(double)rtol, (double)abstol, (double)dtol, maxits);
 
 	return 0;
 }
@@ -964,6 +970,7 @@ FEngine::solvePot(void)
 {
 	int ierr, its;
 	Vec *b = m_rhs->rhs();
+	KSPConvergedReason reason;
 
 	t_solve->start();
 
@@ -979,9 +986,12 @@ FEngine::solvePot(void)
 
 	ierr = KSPGetIterationNumber(m_ksp, &its);
 	CHKERRQ(ierr);
+	ierr = KSPGetConvergedReason(m_ksp, &reason);
+	CHKERRQ(ierr);
+	mprintf("%d iterations, %s (%d)\n", its,
+		reason < 0 ? "FAIL!" : "OK", reason);
 
-	printf("%d iterations\n", its);
-
+//#define VERIFY_SOLUTION
 #ifdef VERIFY_SOLUTION
 	printf("[%d] Verify:\n", m_rank);
 
@@ -1011,7 +1021,7 @@ FEngine::solvePot(void)
 	       m_rank, nv1, nv2, nvd, sqrt(nvx));
 #endif
 
-	return 0;
+	return reason < 0;
 }
 //---------------------------------------------------------------------------
 // Assembly is done before solve, b in m_rhs, x in m_phi
@@ -1020,6 +1030,7 @@ FEngine::solvePot(Vec x)
 {
 	int ierr, its;
 	Vec *b = m_rhs->rhs();
+	KSPConvergedReason reason;
 
 	t_solve->start();
 
@@ -1035,10 +1046,12 @@ FEngine::solvePot(Vec x)
 
 	ierr = KSPGetIterationNumber(m_ksp, &its);
 	CHKERRQ(ierr);
+	ierr = KSPGetConvergedReason(m_ksp, &reason);
+	CHKERRQ(ierr);
+	mprintf("%d iterations, %s (%d)\n", its,
+		reason < 0 ? "FAIL!" : "OK", reason);
 
-	printf("%d iterations\n", its);
-
-	return 0;
+	return reason < 0;
 }
 //---------------------------------------------------------------------------
 int
@@ -1297,8 +1310,16 @@ FEngine::invertSensCols(int numsens, const int *sens, Vec *vec[])
 	}
 
 	for (int n = 0; n < numsens; n++) {
+#ifdef SAVE_RHS
+		char fn[32];
+#endif
 		ierr = VecAssemblyEnd(Cmat[n]);
 		CHKERRQ(ierr);
+#ifdef SAVE_RHS
+		snprintf(fn, sizeof(fn), "rhs%03d.out", n);
+		mprintf("Saving rhs %d to %s\n", n, fn);
+		saveVector(fn, Cmat[n]);
+#endif
 	}
 
 	ierr = solvePot(Cmat, numsens);
@@ -1364,8 +1385,16 @@ FEngine::invertSensCols(int numsens, const point *sens, Vec *vec[])
 	}
 
 	for (int n = 0; n < numsens; n++) {
+#ifdef SAVE_RHS
+		char fn[32];
+#endif
 		ierr = VecAssemblyEnd(Cmat[n]);
 		CHKERRQ(ierr);
+#ifdef SAVE_RHS
+		snprintf(fn, sizeof(fn), "rhs%03d.out", n);
+		mprintf("Saving rhs %d to %s\n", n, fn);
+		saveVector(fn, Cmat[n]);
+#endif
 	}
 
 	ierr = solvePot(Cmat, numsens);
@@ -1577,6 +1606,7 @@ int
 FEngine::solvePot(Vec *C, int nvec)
 {
 	int ierr, its = 0;
+	KSPConvergedReason reason;
 
 	if (C == NULL)
 		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid Vector array");
@@ -1592,7 +1622,12 @@ FEngine::solvePot(Vec *C, int nvec)
 		t_sinv->stop();
 		ierr = KSPGetIterationNumber(m_ksp, &its);
 		CHKERRQ(ierr);
-		mprintf("%d: %d iterations, OK\n", n, its);
+		ierr = KSPGetConvergedReason(m_ksp, &reason);
+		CHKERRQ(ierr);
+		mprintf("%d: %d iterations, %s (%d)\n", n, its,
+			reason < 0 ? "FAIL!" : "OK", reason);
+		if (reason < 0)
+			return 1;
 	}
 
 	return 0;
@@ -2264,6 +2299,7 @@ EShellMat::Mult(Mat mat, Vec x, Vec y)
 	ay   = me->m_tmp;
 	nn   = me->m_nnodes;
 
+//#define MULT_SANITY_CHECK
 #ifdef MULT_SANITY_CHECK
 	if (idx == NULL)
 		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_CORRUPT, "Invalid index pointer\n");
