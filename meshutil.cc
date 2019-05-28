@@ -268,7 +268,7 @@ int MeshUtil::readDipoleList(FILE *f, DInfo *dip, int start,
       if (pdg != dg)
         return 1;
     }
-      
+
     if (sm != SM_J && sm != SM_YAN)
       return 1;
 
@@ -391,6 +391,7 @@ DInfo *MeshUtil::readDipoles(char *fn, int &num, int ne)
   return dip;
 
  err:
+  num = 0;
   fclose(f);
   if (dip) delete[] dip;
   return 0;
