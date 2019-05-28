@@ -442,7 +442,7 @@ rfPot(FEngine &engine)
 
 	if ((sensors == NULL && psensors == NULL) || num_sens < 1)
 		SETERRQ(PETSC_COMM_SELF, 1, "no sensors\n");
-	
+
 	ierr = engine.setupSolver();
 	CHKERRQ(ierr);
 
@@ -628,6 +628,8 @@ main(int argc, char **argv)
 						msh->numElements());
 		if (num_dipoles)
 			mprintf("%d Dipoles loaded\n", num_dipoles);
+		if (dipoles == NULL && num_dipoles)
+			SETERRQ (PETSC_COMM_SELF, PETSC_ERR_MEM, "dipoles!\n");
 	}
 	
 	// Load MagSens
