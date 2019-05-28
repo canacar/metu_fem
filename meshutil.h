@@ -114,6 +114,7 @@ struct DInfo {
 	point D; // local coords
 	SourceModelID smodel; // source model
 	int elem; // element
+	int dgroup; // dipole group
 };
 
 struct Shell {

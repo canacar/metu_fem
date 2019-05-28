@@ -237,34 +237,50 @@ int MeshUtil::readElemList(FILE *f, NodeArray &nds, int start,
 */
 int MeshUtil::readDipoleList(FILE *f, DInfo *dip, int start,
 			   int size, int ne){
-  int n,i;
+  int n,i,nf;
+  int pdg = 0;
 
   for(n=0; n<size; n++){
-    int el, sm;
+    int el, sm, dg;
     double dx, dy, dz;
     double jx, jy, jz;
 
     fgets(m_buf, MMGR_BUFSIZE,f);
-    if(sscanf(m_buf, "%d %d %d %lg %lg %lg %lg %lg %lg",
-	         &i, &sm, &el, &dx, &dy, &dz, &jx, &jy, &jz) != 9)
-		return 1;
-      if(i!=(n+start)) return 1;
-      if (el <0 || el >=ne) return 1;
-      if (dx < -1 || dx > 1) return 1;
-      if (dy < -1 || dy > 1) return 1;
-      if (dz < -1 || dz > 1) return 1;
-      
-      if (sm != SM_J && sm != SM_YAN)
-	      return 1;
+    nf = sscanf(m_buf, "%d %d %d %lg %lg %lg %lg %lg %lg %d",
+               &i, &sm, &el, &dx, &dy, &dz, &jx, &jy, &jz, &dg);
 
-      dip[n].elem=el;
-      dip[n].smodel=(SourceModelID) sm;
-      dip[n].D[0]=dx;
-      dip[n].D[1]=dy;
-      dip[n].D[2]=dz;
-      dip[n].J[0]=jx;
-      dip[n].J[1]=jy;
-      dip[n].J[2]=jz;
+    if (nf == 9)
+      dg = n;
+    else if (nf != 10)
+      return 1;
+
+    if(i!=(n+start)) return 1;
+    if (el <0 || el >=ne) return 1;
+    if (dx < -1 || dx > 1) return 1;
+    if (dy < -1 || dy > 1) return 1;
+    if (dz < -1 || dz > 1) return 1;
+
+    /* make sure dipole group is increasing */
+    if (n == 0)
+      pdg = dg;
+    else if (dg != pdg) {
+        pdg ++;
+      if (pdg != dg)
+        return 1;
+    }
+      
+    if (sm != SM_J && sm != SM_YAN)
+      return 1;
+
+    dip[n].elem=el;
+    dip[n].smodel=(SourceModelID) sm;
+    dip[n].dgroup = dg;
+    dip[n].D[0]=dx;
+    dip[n].D[1]=dy;
+    dip[n].D[2]=dz;
+    dip[n].J[0]=jx;
+    dip[n].J[1]=jy;
+    dip[n].J[2]=jz;
   }
 
   return 0;

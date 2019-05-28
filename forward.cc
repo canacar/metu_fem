@@ -301,11 +301,13 @@ sens(FEngine &engine, FEMesh *mesh)
 		}
 	}
 
-	for (int n = 0; n < num_dipoles; n++) {
-		ierr = engine.clearRHS();
-		CHKERRQ(ierr);
+	ierr = engine.clearRHS();
+	CHKERRQ(ierr);
+	int ndpg = 0;
 
-		mprintf("Dipole %d\n", n);
+	for (int n = 0; n < num_dipoles; n++) {
+		int dgroup = dipoles[n].dgroup;
+		mprintf("Dipole %d, group: %d\n", n, dgroup);
 
 		ierr = engine.writeDipoleInfo(fi, 1, &dipoles[n]);
 		CHKERRQ(ierr);
@@ -313,20 +315,30 @@ sens(FEngine &engine, FEMesh *mesh)
 		ierr = engine.addSource(dipoles[n]);
 		CHKERRQ(ierr);
 
-		mprintf("Solving ...\n");
+		ndpg++;
+
+		if (n + 1 < num_dipoles && dipoles[n + 1].dgroup == dgroup)
+			continue;
+
+		mprintf("Solving dipole group %d of %d dipoles...\n", dgroup, ndpg);
 
 		ierr = engine.solvePot();
 		CHKERRQ(ierr);
 
-		snprintf(fname, sizeof(fname), "x%03d.sens", n);
+		snprintf(fname, sizeof(fname), "x%03d.sens", dgroup);
 
 		ierr = engine.savePot(fname);
 		CHKERRQ(ierr);
 
-		snprintf(fname, sizeof(fname), "sn%02d", n);
+		snprintf(fname, sizeof(fname), "sn%02d", dgroup);
 
 		ierr = engine.saveSensMatDip(fname,  Ainv, num_sens, nsig);
 		CHKERRQ(ierr);
+
+		ierr = engine.clearRHS();
+		CHKERRQ(ierr);
+
+		ndpg = 0;
 	}
 
 	ierr = VecDestroyVecs(num_sens, &Ainv);
@@ -714,7 +726,7 @@ main(int argc, char **argv)
 			if (num_dipoles == 0) {
 				printf("Nothing to do (no dipoles)!\n");
 				ierr = 0;
-			} else if (3 * (num_bsens + 1) > num_dipoles) {
+			} else if (num_bsens && 3 * (num_bsens + 1) > num_dipoles) {
 				// do not store C, store phi instead
 				ierr = forward2(*eng);
 			} else {
@@ -728,11 +740,11 @@ main(int argc, char **argv)
 	} catch(...) {
 		SETERRQ(PETSC_COMM_SELF, 1, "Unknown exception\n");
 	}
-	
+
+	HPTimerMgr::report();
+
 	ierr = PetscFinalize();
 	CHKERRQ(ierr);
-	
-	HPTimerMgr::report();
 	
 	if(msh) delete msh;
 	
