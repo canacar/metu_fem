@@ -188,7 +188,7 @@ void FENodeInfo::delNeighbor(int nbr)
 }
 //---------------------------------------------------------------------------
 int
-FEMesh::parseSigmaLine(const char *buf, int idx, vector<double> *cmap, double *sig)
+FEMesh::parseSigmaLine(const char *buf, int idx, vector<double> *cmap, double *sig, int *cid)
 {
 	const char *sp;
 	char *ep;
@@ -218,7 +218,11 @@ FEMesh::parseSigmaLine(const char *buf, int idx, vector<double> *cmap, double *s
 			return 1;
 		}
 		val = (*cmap)[ci - 1];
+		if (cid != NULL)
+			*cid = ci;
 	} else {
+		if (cid != NULL)
+			*cid = -1;
 		val = strtod(sp, &ep);
 		if (sp == ep) {
 			fprintf(stderr, "Invalid conductivity: %s\n", sp);
@@ -347,7 +351,7 @@ fprintf(stderr, "loading %d elements\n", ne);
 	}
     }
 
-    int nsig;
+    int nsig, cls;
    
 fprintf(stderr, "loading %d sigma\n", ne);
     if(fgets(buf, MESHBUFSIZE, f)==NULL) return 0;     // elem sigma, optional
@@ -356,6 +360,10 @@ fprintf(stderr, "loading %d sigma\n", ne);
     if(nsig == ne) {
 
         m_sigelem=new double[ne];
+	if (cmap)
+		m_sigelemcls = new int[ne];
+	else
+		m_sigelemcls = NULL;
     
         for(int n=0; n<ne; n++){
             double sig;
@@ -363,11 +371,13 @@ fprintf(stderr, "loading %d sigma\n", ne);
 		fprintf(stderr, "failed to read sigma line for element %d\n", n + 1);
 		return 1;
 	    }
-            if (parseSigmaLine(buf, n + 1, cmap, &sig)) {
+            if (parseSigmaLine(buf, n + 1, cmap, &sig, &cls)) {
 		fprintf(stderr, "failed to parse sigma line for element %d\n", n + 1);
                 return 1;
 	    }
             m_sigelem[n]=sig;
+            if (cmap)
+		m_sigelemcls[n]=cls;
         }
 
         if(fgets(buf, MESHBUFSIZE, f)==NULL) return 0;     
@@ -377,13 +387,19 @@ fprintf(stderr, "loading %d sigma\n", ne);
     if(nsig == nn) {                                // node sigma, optional
 
         m_signode=new double[nn];
+	if (cmap)
+		m_signodecls = new int[nn];
+	else
+		m_signodecls = NULL;
     
         for(int n=0; n<nn; n++){
             double sig;
             if(fgets(buf, MESHBUFSIZE, f)==NULL) return 1;
-            if (parseSigmaLine(buf, n + 1, cmap, &sig))
+            if (parseSigmaLine(buf, n + 1, cmap, &sig, &cls))
                 return 1;
             m_signode[n]=sig;
+            if (cmap)
+		m_sigelemcls[n]=cls;
         }
     }
 

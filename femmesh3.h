@@ -168,6 +168,8 @@ public:
     }
     inline double *getSigmaE(void) {return m_sigelem;}
     inline double *getSigmaN(void) {return m_signode;}
+    inline int *getSigmaEcls(void) {return m_sigelemcls;}
+    inline int *getSigmaNcls(void) {return m_signodecls;}
     int save(const char *fn, double *esig=0, double *nsig=0);
 
 //    findNodeNeighbors(void);
@@ -215,7 +217,7 @@ protected:
     int markNeighborNodes(int nd);
     void limitCoord(double &x, double &y, double &z);
 
-    int parseSigmaLine(const char *buf, int idx, vector<double> *cmap, double *sig);
+    int parseSigmaLine(const char *buf, int idx, vector<double> *cmap, double *sig, int *cid);
 
     vector<FENeighbor> m_nbrs; // neighbor info
     vector<Point3> m_nodes;
@@ -231,6 +233,8 @@ protected:
     int m_nfelem;
     double *m_signode;
     double *m_sigelem;
+    int    *m_signodecls;
+    int    *m_sigelemcls;
     char   *m_meshfn;
 };
 
