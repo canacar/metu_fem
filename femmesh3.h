@@ -29,7 +29,6 @@
 #include "define.h"
 #include "point3.h"
 #include "shape.h"
-//#include "estore.h"
 #include "scache.h"
 #include <vector>
 #include <deque>
@@ -51,7 +50,7 @@ struct FENeighbor{
 };
 
 // XXX need something more efficient!
-#define MAX_ELEM_NBR 400
+#define MAX_ELEM_NBR 8000
 // node flags
 #define FEM_NODE_BOUND 1        // node fixed to a boundary
 #define FEM_NODE_NBCHG 2        // change in neighbor/environment
@@ -59,20 +58,18 @@ struct FENeighbor{
 #define FEM_NODE_EBCLS 8	// Element class boundary
 
 struct FENodeInfo{
-    FENodeInfo(int f=0): flags(f), nnbr(0) {}
+    FENodeInfo(int f=0): flags(f) {}
     FENodeInfo(const FENodeInfo &i);
 
     FENodeInfo &operator=(const FENodeInfo &i);
 
-    inline int numNeighbors(void) const {return nnbr;}
-    inline int getNeighbor(int n) const
-        {assert(n>=0 && n<nnbr); return elemnbr[n]; }
+    inline int numNeighbors(void) const {return nbrs.size();}
+    inline int getNeighbor(int n) const {return nbrs[n]; }
     void addNeighbor(int nbr);
     void delNeighbor(int nbr);
 
     unsigned flags;
-    int nnbr;
-    int elemnbr[MAX_ELEM_NBR];
+    deque<int> nbrs;
 };
 
 class FEMesh{
@@ -85,6 +82,10 @@ public:
     inline int numNodeElem(void) const {return m_nnelem;}
     inline int numFaceElem(void) const {return m_nfelem;}
     inline int numNodeFace(void) const {return m_nnface;}
+
+    inline int numEdgeElem(void) const {
+	    return ((m_nnelem == 4 || m_nnelem == 10) ? 6 : 12);
+    }
 
     inline unsigned nodeFlags(int n) const {return m_ninfo[n].flags;}
 
@@ -132,6 +133,7 @@ public:
     node *getElem(int elem);
     const Point3 &getNode(int node) const;
     void getEdge(int elem, int edge, Point3 &p1, Point3 &p2);
+    void getEdge(int elem, int edge, int &n1, int &n2);
 
     void getLimits(double &x0, double &y0, double &z0,
                    double &x1, double &y1, double &z1) const;
@@ -166,7 +168,7 @@ public:
     }
     inline double *getSigmaE(void) {return m_sigelem;}
     inline double *getSigmaN(void) {return m_signode;}
-    int save(char *fn, double *esig=0, double *nsig=0);
+    int save(const char *fn, double *esig=0, double *nsig=0);
 
 //    findNodeNeighbors(void);
     int elemBoundSph(int el, Point3 &c, double &rad) const;
@@ -184,6 +186,10 @@ protected:
     static FaceList m_facemap8[];
     static int m_nnbrmap8[][3];
     static int m_edge8[][2];
+
+    static FaceList m_facemap10[];
+    static int m_nnbrmap10[][3];
+    static int m_edge10[][2];
 
     static FaceList m_facemap4[];
     static int m_nnbrmap4[][3];
@@ -216,7 +222,6 @@ protected:
     vector<RElem> m_elements;
     deque<FENodeInfo> m_ninfo;
 
-//    EStore *m_estore;
     SCache *m_scache;
     FEShape *m_shape;
     int m_nnodes;

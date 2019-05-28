@@ -23,13 +23,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 //---------------------------------------------------------------------------
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <deque>
 #include <assert.h>
 #include <math.h>
 #include "femmesh3.h"
 #include "shape20.h"
+#include "shape10.h"
 #include "shape8.h"
 #include "shape4.h"
 
@@ -59,6 +62,11 @@ FaceList FEMesh::m_facemap8[]={{4, 5, 6, 7},
 				{3, 2, 1, 0},
 				{7, 6, 2, 3}};
 
+
+FaceList FEMesh::m_facemap10[]={{3, 2, 1, 0xff},
+				{0, 2, 3, 0xff},
+				{0, 3, 1, 0xff},
+				{0, 1, 2, 0xff}};
 
 FaceList FEMesh::m_facemap4[]={{3, 2, 1, 0xff},
 				{0, 2, 3, 0xff},
@@ -96,6 +104,17 @@ int FEMesh::m_nnbrmap8[][3]={{1, 3, 4},  // 0
                              {2, 5, 7},  // 6
                              {3, 4, 6}}; // 7
 
+int FEMesh::m_nnbrmap10[][3]={{4, 6, 7},  // 0
+			      {4, 5, 8},  // 1
+			      {5, 6, 9},  // 2
+			      {7, 8, 9},  // 3
+			      {0, 1, -1},  // 4
+			      {1, 2, -1},  // 5
+			      {0, 2, -1},  // 6
+			      {0, 3, -1},  // 7
+			      {1, 3, -1},  // 8
+			      {2, 3, -1}}; // 9
+
 int FEMesh::m_nnbrmap4[][3]={{1, 2, 3},  // 0
                              {0, 2, 3},  // 1
                              {0, 1, 3},  // 2
@@ -107,13 +126,16 @@ int FEMesh::m_edge20[][2]={{ 0, 2}, { 2, 4}, { 4, 6}, { 6, 0},
 
 int FEMesh::m_edge8[][2]={{0,1}, {1,2}, {2,3}, {3,0},
 			  {0,4}, {1,5}, {2,6}, {3,7},
-			  {4,5}, {5,6}, {6,7}, {7,8}};
+			  {4,5}, {5,6}, {6,7}, {7,4}};
+
+int FEMesh::m_edge10[][2]={{0,1}, {0,2}, {0,3},
+			  {1,2}, {1,3}, {2,3}};
 
 int FEMesh::m_edge4[][2]={{0,1}, {0,2}, {0,3},
 			  {1,2}, {1,3}, {2,3}};
 
 #define MAX_CORNER_NODE 8
-// defaults are for 20 noded, loadMesh modifies it for 8 noded elements
+// defaults are for 20 noded, loadMesh modifies it for other elements
 int FEMesh::m_corner[]={12,14,16,18,0,2,4,6};
 
 //---------------------------------------------------------------------------
@@ -139,34 +161,30 @@ FENeighbor::FENeighbor(const FENeighbor &nbr)
 FENodeInfo &FENodeInfo::operator=(const FENodeInfo &i)
 {
     flags = i.flags;
-    nnbr=i.nnbr;
-    memcpy(elemnbr, i.elemnbr, sizeof(elemnbr));
+    nbrs = i.nbrs;
     return *this;
 }
 //---------------------------------------------------------------------------
-FENodeInfo::FENodeInfo(const FENodeInfo &i)
+FENodeInfo::FENodeInfo(const FENodeInfo &i) : flags(i.flags), nbrs(i.nbrs)
 {
     flags = i.flags;
-    nnbr=i.nnbr;
-    memcpy(elemnbr, i.elemnbr, sizeof(elemnbr));
 }
 //---------------------------------------------------------------------------
 void FENodeInfo::addNeighbor(int nbr)
 {
-    assert(nnbr>=0 && nnbr<MAX_ELEM_NBR);
-    for (int n=0; n < nnbr; n++)
-        if (elemnbr[n] == nbr) return;
-    elemnbr[nnbr++]=nbr;
+    for (size_t n=0; n < nbrs.size(); n++)
+        if (nbrs[n] == nbr) return;
+    nbrs.push_back(nbr);
 }
 //---------------------------------------------------------------------------
 void FENodeInfo::delNeighbor(int nbr)
 {
-    assert(nbr>=0 && nnbr<MAX_ELEM_NBR);
-    int n;
-    for (n=0; n < nnbr; n++)
-        if (elemnbr[n] == nbr) break;
-    assert (n < nnbr);  // not found
-    elemnbr[n] = elemnbr[--nnbr];
+    size_t n;
+    for (n=0; n < nbrs.size(); n++)
+        if (nbrs[n] == nbr) break;
+    assert (n < nbrs.size());  // not found
+    nbrs[n] = nbrs.back();
+    nbrs.pop_back();
 }
 //---------------------------------------------------------------------------
 int
@@ -268,7 +286,7 @@ fprintf(stderr, "loading %d nodes\n", nn);
     else if (r !=2) return 1;
     else printf("%d nodes/elem\n",ns);
 
-    if (ns !=20 && ns !=8 && ns != 4) return 1;
+    if (ns !=20 && ns !=8 && ns != 10 && ns != 4) return 1;
     if(ne<=0) return 1;
     m_nnelem=ns;
 
@@ -279,6 +297,13 @@ fprintf(stderr, "loading %d nodes\n", nn);
 	// correct m_corner
         for (int n=0; n < MAX_CORNER_NODE; n++)
                 m_corner[n] = (n < m_nnelem) ? n : -1;
+	m_nnface = 3;
+	m_nfelem = 4;
+    }else if (m_nnelem == 10) {
+        m_shape = new FEShape10();
+	// correct m_corner
+        for (int n=0; n < MAX_CORNER_NODE; n++)
+                m_corner[n] = (n < 4) ? n : -1;
 	m_nnface = 3;
 	m_nfelem = 4;
     } else if (m_nnelem==8) {
@@ -371,13 +396,20 @@ int FEMesh::initMesh(int nnelem)
     m_nnodes = 0;
     m_nelem = 0;
 
-    if (nnelem !=20 && nnelem !=8 && nnelem != 4)
+    if (nnelem !=20 && nnelem !=8 && nnelem != 4 && nnelem != 10)
 	    return 1;
 
     m_nnelem = nnelem;
 
     if (m_nnelem == 4) {
         m_shape = new FEShape4();
+	// correct m_corner
+        for (int n=0; n < MAX_CORNER_NODE; n++)
+                m_corner[n] = (n < m_nnelem) ? n : -1;
+	m_nnface = 3;
+	m_nfelem = 4;
+    } else if (m_nnelem == 10) {
+        m_shape = new FEShape10();
 	// correct m_corner
         for (int n=0; n < MAX_CORNER_NODE; n++)
                 m_corner[n] = (n < m_nnelem) ? n : -1;
@@ -409,7 +441,6 @@ FEMesh::FEMesh()
     m_nnface = 0;
     m_nfelem = 0;
     m_meshfn = NULL;
-//    m_estore = NULL;
     m_scache = NULL;
 }
 //---------------------------------------------------------------------------
@@ -420,8 +451,6 @@ FEMesh::~FEMesh(void)
     if (m_shape) delete m_shape;
     if (m_meshfn != NULL)
 	    free(m_meshfn);	// allocated by strdup
-//    if (m_estore != NULL)
-//	    delete m_estore;	// allocated by strdup
     if (m_scache != NULL)
 	    delete m_scache;	// allocated by strdup
 }
@@ -453,6 +482,9 @@ int FEMesh::getFaceNodes(int elem, int face, int *nodes) const
     } else if (m_nnelem == 8) {
         for(int n=0; n<m_nnface; n++)
             nodes[n]=(*nd)[m_facemap8[face][n]];
+    } else if (m_nnelem == 10) {
+        for(int n=0; n<m_nnface; n++)
+            nodes[n]=(*nd)[m_facemap10[face][n]];
     } else {
         for(int n=0; n<m_nnface; n++)
             nodes[n]=(*nd)[m_facemap4[face][n]];
@@ -550,6 +582,8 @@ int FEMesh::locateFace(int *nodes)
                         if (m_facemap20[f][i]==nd) break;
                 } else if (m_nnelem == 8) {
                         if (m_facemap8[f][i]==nd) break;
+                } else if (m_nnelem == 10) {
+                        if (m_facemap10[f][i]==nd) break;
                 } else {
                         if (m_facemap4[f][i]==nd) break;
 		}
@@ -630,11 +664,11 @@ FEMesh::localCoord(int elem, double &x, double &y, double &z,
     double alpha = 0.8;
     double derr, perr;
 
-#define MAX_ITER 300
-#define PE_TRESH 1e-9
-#define DE_TRESH 1e-12
+#define MAX_ITER 1000
+#define PE_TRESH 1e-12
+#define DE_TRESH 1e-25
 
-    if (m_nnelem == 4)
+    if (m_nnelem == 4 || m_nnelem == 10)
 	    i = j = k = 0.25;
 
     while (iter++ < MAX_ITER) {
@@ -673,7 +707,7 @@ FEMesh::localCoord(int elem, double &x, double &y, double &z,
 
     if (i > 1 || j > 1 || k > 1)
 	    ret++;
-    else if (m_nnelem == 4) {
+    else if (m_nnelem == 4 || m_nnelem == 10) {
 	    if (i < 0 || j < 0 || k < 0 || (i + j + k) > 1)
 		    ret++;
     } else if (i < -1 || j < -1 || k < -1)
@@ -702,7 +736,7 @@ FEMesh::limitCoord(double &x, double &y, double &z)
 	if (z > 1)
 		z = 1;
 
-	if (m_nnelem == 4) {
+	if (m_nnelem == 4 || m_nnelem == 10) {
 		if (x < 0)
 			x = 0;
 		if (y < 0)
@@ -727,34 +761,11 @@ int
 FEMesh::localElem(double &x, double &y, double &z)
 {
 	int n, e0, ni;
-#if 0
-	int num = 0;
-	int max = 0;
-#endif
 	double err, err0 = -1;
 	point pa[NUM_NODES];
 
 	Point3 p(x, y, z);
 
-#if 0
-	if (m_estore == NULL) {
-		Point3 pl0, pl1;
-		getLimits(pl0, pl1);
-		m_estore = new EStore(Rect3(pl0, pl1));
-		for (n = 0; n < numElements(); n++) {
-			Point3 c;
-			double r;
-			elemBoundSph(n, c, r);
-			r *= 1.001;
-			m_->add(n, Sphere3(c, r));
-		}
-	}
-	
-	const int *el = m_estore->locate(p, num, max);
-
-	for (n = 0; n < num; n++) {
-		int e = el[n];
-#endif
 	if (m_scache == NULL) {
 		Point3 pl0, pl1;
 		getLimits(pl0, pl1);
@@ -1115,7 +1126,7 @@ void FEMesh::saveSigmaN(FILE *f, double *sigma)
 }
 //---------------------------------------------------------------------------
 #define BUF_LEN 1024
-int FEMesh::save(char *fn, double *esig, double *nsig)
+int FEMesh::save(const char *fn, double *esig, double *nsig)
 {
     static char buf[BUF_LEN+1];
     if(fn==0) return 1;
@@ -1236,9 +1247,14 @@ int FEMesh::markBoundaryNodes(void)
         for(int f=0; f<m_nfelem; f++){
             if(fn.nelem[f]>=0) continue;
             FaceList *fl;
-            if (m_nnelem == 20) fl=&(m_facemap20[f]);
-            else if (m_nnelem == 8) fl=&(m_facemap8[f]);
-            else fl=&(m_facemap4[f]);
+            if (m_nnelem == 20)
+	        fl=&(m_facemap20[f]);
+            else if (m_nnelem == 8)
+		fl=&(m_facemap8[f]);
+            else if (m_nnelem == 10)
+		fl=&(m_facemap10[f]);
+            else
+		fl=&(m_facemap4[f]);
 
             for(int n=0; n<m_nnface; n++){
                 int nd=(*fl)[n];
@@ -1267,9 +1283,14 @@ int FEMesh::markClassBoundary(int cls)
 		if (getElemClass(fn.nelem[f]) == cls)
 			continue;
             FaceList *fl;
-            if (m_nnelem == 20) fl=&(m_facemap20[f]);
-            else if (m_nnelem == 8) fl=&(m_facemap8[f]);
-            else fl=&(m_facemap4[f]);
+            if (m_nnelem == 20)
+		fl=&(m_facemap20[f]);
+            else if (m_nnelem == 8)
+		fl=&(m_facemap8[f]);
+            else if (m_nnelem == 10)
+		fl=&(m_facemap10[f]);
+            else
+		fl=&(m_facemap4[f]);
 
             for(int n=0; n<m_nnface; n++){
                 int nd=(*fl)[n];
@@ -1302,9 +1323,14 @@ int FEMesh::getNeighborNodes(int nd, int *nodes, int size)
         for (int m=0; m<3; m++) {
             int nn;
 
-            if(m_nnelem == 20) nn=m_nnbrmap20[i][m];
-            else if(m_nnelem == 8) nn=m_nnbrmap8[i][m];
-            else nn=m_nnbrmap4[i][m];
+            if(m_nnelem == 20)
+		nn=m_nnbrmap20[i][m];
+            else if(m_nnelem == 8)
+		nn=m_nnbrmap8[i][m];
+            else if(m_nnelem == 10)
+		nn=m_nnbrmap10[i][m];
+            else
+		nn=m_nnbrmap4[i][m];
 
             if (nn < 0) continue;
             nn=(*nds)[nn];  // map to node id
@@ -1334,9 +1360,14 @@ int FEMesh::markNeighborNodes(int nd)
         assert(i < m_nnelem);
         for (int m=0; m<3; m++) {
             int nn;
-            if (m_nnelem == 20) nn=m_nnbrmap20[i][m];
-            else if (m_nnelem == 8) nn=m_nnbrmap8[i][m];
-            else nn=m_nnbrmap4[i][m];
+            if (m_nnelem == 20)
+		nn=m_nnbrmap20[i][m];
+            else if (m_nnelem == 8)
+		nn=m_nnbrmap8[i][m];
+            else if (m_nnelem == 10)
+		nn=m_nnbrmap10[i][m];
+            else
+		nn=m_nnbrmap4[i][m];
 
             if (nn < 0) continue;
             nn=(*nds)[nn];  // map to node id
@@ -1471,7 +1502,7 @@ int FEMesh::elemBoundSph(int el, Point3 &c, double &rad) const
 
 	// set center
 	double x,y,z;
-	if (m_nnelem == 4)
+	if (m_nnelem == 4 || m_nnelem == 10)
 		x = y = z = 0.25;
 	else
 		x = y = z = 0;
@@ -1485,12 +1516,14 @@ int FEMesh::elemBoundSph(int el, Point3 &c, double &rad) const
 	if (rad >= 0)
 		return 0;
 
-	int start = (m_nnelem == 4) ? 0 : -1;
+	int start = (m_nnelem == 4 || m_nnelem == 10) ? 0 : -1;
 
 	for (int i = start; i <= 1; i++) {
 		for (int j = start; j <= 1; j++) {
 			for (int k = start; k <= 1; k++) {
 				if (m_nnelem == 4 && (i + j + k) > 1)
+					continue;
+				if (m_nnelem == 10 && (i + j + k) > 1)
 					continue;
 				x=(double)i;
 				y=(double)j;
@@ -1516,19 +1549,61 @@ void FEMesh::getEdge(int elem, int edge, Point3 &p1, Point3 &p2)
 	
 	int n1, n2;
 
-	if (m_nnelem == 20) {
+	switch(m_nnelem) {
+	case 20:
 		n1=m_edge20[edge][0];
 		n2=m_edge20[edge][1];
-	} else if (m_nnelem == 8) {
+		break;
+	case 10:
+		n1=m_edge10[edge][0];
+		n2=m_edge10[edge][1];
+		break;
+	case 8:
 		n1=m_edge8[edge][0];
 		n2=m_edge8[edge][1];
-	} else {
+		break;
+	case 4:
 		n1=m_edge4[edge][0];
 		n2=m_edge4[edge][1];
+		break;
+	default:
+		assert(0);
 	}
 
 	p1 = getNode((*nd)[n1]);
 	p2 = getNode((*nd)[n2]);
+}
+//---------------------------------------------------------------------------
+void FEMesh::getEdge(int elem, int edge, int &n1, int &n2)
+{
+	assert(elem>=0 && elem<m_nelem);
+	assert(edge>=0 && edge <numEdgeElem());
+	node *nd=getElem(elem);
+
+	switch(m_nnelem) {
+	case 20:
+		n1=m_edge20[edge][0];
+		n2=m_edge20[edge][1];
+		break;
+	case 10:
+		n1=m_edge10[edge][0];
+		n2=m_edge10[edge][1];
+		break;
+	case 8:
+		n1=m_edge8[edge][0];
+		n2=m_edge8[edge][1];
+		break;
+	case 4:
+		n1=m_edge4[edge][0];
+		n2=m_edge4[edge][1];
+		break;
+	default:
+		assert(0);
+	}
+
+	n1 = (*nd)[n1];
+	n2 = (*nd)[n2];
+
 }
 //---------------------------------------------------------------------------
 int
@@ -1554,7 +1629,7 @@ FEMesh::faceSurfaceArea(int elem, int face, double &sa) const
 	static point pa[NUM_NODES];
 	pArray(elem,pa);
 
-	if (m_nnelem == 4)
+	if (m_nnelem == 4 || m_nnelem == 10)
 		return m_shape->SurfaceArea(pa, face, sa);
 	else
 		return m_shape->SurfaceArea(pa, face2surf[face], sa);
