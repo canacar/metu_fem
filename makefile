@@ -18,4 +18,5 @@ include ${PETSC_DIR}/conf/variables
 include ${PETSC_DIR}/conf/rules
 
 forward: ${FORWARD_OBJ} chkopts
-	${CLINKER}  -g -L/usr/local/lib -o $@ ${FORWARD_OBJ} ${PETSC_LIB} -lz
+	${CLINKER} -g -L/usr/local/lib -o $@ ${FORWARD_OBJ} ${PETSC_LIB} -lz
+

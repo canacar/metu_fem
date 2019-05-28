@@ -89,7 +89,7 @@ forward(FEngine &engine)
 	try {
 		fi = engine.createDipoleInfo("xinfo.pot", num_dipoles);
 	} catch(...) {
-		SETERRQ(PETSC_ERR_FILE_OPEN, "Failed to open xInfo file!\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_OPEN, "Failed to open xInfo file!\n");
 	}
 
 	if (bsensors != NULL) {
@@ -116,7 +116,7 @@ forward(FEngine &engine)
 		if (bsensors != NULL) {
 			mag = engine.solveMag(Cmat, num_bsens, bsensors);
 			if (mag == NULL)
-				SETERRQ(1, "Failed to solve magnetic field\n");
+				SETERRQ(PETSC_COMM_SELF, 1, "Failed to solve magnetic field\n");
 		}
 		
 		snprintf(fname, sizeof(fname), "x%03d.pot", n);
@@ -135,7 +135,7 @@ forward(FEngine &engine)
 		fclose(fi);
 
 	if (bsensors != NULL) {
-		ierr = VecDestroyVecs(Cmat, num_bsens);
+		ierr = VecDestroyVecs(num_bsens, &Cmat);
 		CHKERRQ(ierr);
 	}
 	
@@ -161,7 +161,7 @@ forward2(FEngine &engine)
 	Vec *Cmat = NULL;
 
 	if (num_dipoles < 1 || num_bsens < 1 || bsensors == 0)
-		SETERRQ(1, "invalid arguments\n");
+		SETERRQ(PETSC_COMM_SELF, 1, "invalid arguments\n");
 
 	ierr = engine.setupSolver();
 	CHKERRQ(ierr);
@@ -169,7 +169,7 @@ forward2(FEngine &engine)
 	try {
 		fi = engine.createDipoleInfo("xinfo.pot", num_dipoles);
 	} catch(...) {
-		SETERRQ(PETSC_ERR_FILE_OPEN, "Failed to open xInfo file!\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_OPEN, "Failed to open xInfo file!\n");
 	}
 
 	ierr = engine.getVectors(num_dipoles, &Phimat);
@@ -204,7 +204,7 @@ forward2(FEngine &engine)
 		// solve primary magnetic field
 		double *mag = engine.solveMagPri(num_bsens, bsensors);
 		if (mag == NULL)
-			SETERRQ(1, "Failed to solve magnetic field\n");
+			SETERRQ(PETSC_COMM_SELF, 1, "Failed to solve magnetic field\n");
 
 		double *mtot = dmag[n];
 		double *mpri = mag;
@@ -228,7 +228,7 @@ forward2(FEngine &engine)
 			double *mag = NULL;
 			mag = engine.solveMagSec(Cmat, 1, &Phimat[d]);
 			if (mag == NULL)
-				SETERRQ(1, "Failed to solve magnetic field\n");
+				SETERRQ(PETSC_COMM_SELF, 1, "Failed to solve magnetic field\n");
 			double *dst = dmag[d];
 			memcpy(dst+(6*s)+3, mag, 3 * sizeof(double));
 			delete[] mag;
@@ -249,10 +249,10 @@ forward2(FEngine &engine)
 	if (fi)
 		fclose(fi);
 
-	ierr = VecDestroyVecs(Cmat, 3);
+	ierr = VecDestroyVecs(3, &Cmat);
 	CHKERRQ(ierr);
 
-	ierr = VecDestroyVecs(Phimat, num_dipoles);
+	ierr = VecDestroyVecs(num_dipoles, &Phimat);
 	CHKERRQ(ierr);
 
 	return 0;
@@ -262,15 +262,16 @@ forward2(FEngine &engine)
 #define __FUNCT__ "sens"
 
 int
-sens(FEngine &engine)
+sens(FEngine &engine, FEMesh *mesh)
 {
 	int ierr;
 
 	char fname[PATH_MAX];
 	FILE *fi = NULL;
+	int nsig = -1;
 
 	if ((sensors == NULL && psensors == NULL) || num_sens < 1)
-		SETERRQ(1, "no sensors\n");
+		SETERRQ(PETSC_COMM_SELF, 1, "no sensors\n");
 
 	ierr = engine.setupSolver();
 	CHKERRQ(ierr);
@@ -289,7 +290,15 @@ sens(FEngine &engine)
 	try {
 		fi = engine.createDipoleInfo("xinfo.sens", num_dipoles);
 	} catch(...) {
-		SETERRQ(PETSC_ERR_FILE_OPEN, "Failed to open xInfo file!\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_OPEN, "Failed to open xInfo file!\n");
+	}
+
+	if (mesh != NULL) {
+		int *sig = mesh->getSigmaEcls();
+		for (int i = 0; i < mesh->numElements(); i++) {
+			if (nsig < sig[i])
+				nsig = sig[i];
+		}
 	}
 
 	for (int n = 0; n < num_dipoles; n++) {
@@ -308,7 +317,7 @@ sens(FEngine &engine)
 
 		ierr = engine.solvePot();
 		CHKERRQ(ierr);
-		
+
 		snprintf(fname, sizeof(fname), "x%03d.sens", n);
 
 		ierr = engine.savePot(fname);
@@ -316,11 +325,11 @@ sens(FEngine &engine)
 
 		snprintf(fname, sizeof(fname), "sn%02d", n);
 
-		ierr = engine.saveSensMatDip(fname,  Ainv, num_sens);
+		ierr = engine.saveSensMatDip(fname,  Ainv, num_sens, nsig);
 		CHKERRQ(ierr);
 	}
 
-	ierr = VecDestroyVecs(Ainv, num_sens);
+	ierr = VecDestroyVecs(num_sens, &Ainv);
 	CHKERRQ(ierr);
 	
 	if (fi)
@@ -344,14 +353,14 @@ sensB(FEngine &engine)
 	CHKERRQ(ierr);
 
 	if (bsensors == NULL || num_bsens < 1)
-		SETERRQ(1, "No magnetic field sensors\n");
+		SETERRQ(PETSC_COMM_SELF, 1, "No magnetic field sensors\n");
 
 	Vec *Cmat;
 	ierr = engine.calcMagSecMat(num_bsens, bsensors, &Cmat);
 	CHKERRQ(ierr);
 
 	if (Cmat == NULL)
-		SETERRQ(1, "Failed to calculate matrix!\n");
+		SETERRQ(PETSC_COMM_SELF, 1, "Failed to calculate matrix!\n");
 	
 	// compute nonzero columns
 
@@ -361,7 +370,7 @@ sensB(FEngine &engine)
 	try {
 		fi = engine.createDipoleInfo("xinfo.bsp", num_dipoles);
 	} catch(...) {
-		SETERRQ(1, "Failed to open xInfo file!\n");
+		SETERRQ(PETSC_COMM_SELF, 1, "Failed to open xInfo file!\n");
 	}
 	
 	for (int n = 0; n < num_dipoles; n++) {
@@ -383,7 +392,7 @@ sensB(FEngine &engine)
 		
 		double *mag = engine.solveMag(Cmat, num_bsens, bsensors);
 		if (mag == NULL)
-			SETERRQ(1, "failed to solve magnetic field");
+			SETERRQ(PETSC_COMM_SELF, 1, "failed to solve magnetic field");
 
 		snprintf(fname, sizeof(fname), "x%03d.bsp", n);
 		ierr = engine.savePot(fname);
@@ -405,7 +414,7 @@ sensB(FEngine &engine)
 	if (fi)
 		fclose(fi);
 
-	ierr = VecDestroyVecs(Cmat, num_bsens);
+	ierr = VecDestroyVecs(num_bsens, &Cmat);
 	CHKERRQ(ierr);
 
 	return 0;
@@ -420,7 +429,7 @@ rfPot(FEngine &engine)
 	int ierr;
 
 	if ((sensors == NULL && psensors == NULL) || num_sens < 1)
-		SETERRQ(1, "no sensors\n");
+		SETERRQ(PETSC_COMM_SELF, 1, "no sensors\n");
 	
 	ierr = engine.setupSolver();
 	CHKERRQ(ierr);
@@ -440,7 +449,7 @@ rfPot(FEngine &engine)
 		engine.saveVector(buf, Ainv[n]);
 	}
 
-	ierr = VecDestroyVecs(Ainv, num_sens);
+	ierr = VecDestroyVecs(num_sens, &Ainv);
 	CHKERRQ(ierr);
 
 	return 0;
@@ -457,7 +466,7 @@ rfMag(FEngine &engine, double rad)
 	Vec *Cmat = NULL;
 	
 	if (bsensors == NULL || num_bsens < 1)
-		SETERRQ(1, "No magnetic field sensors\n");
+		SETERRQ(PETSC_COMM_SELF, 1, "No magnetic field sensors\n");
 
 	ierr = engine.setupSolver();
 	CHKERRQ(ierr);
@@ -473,7 +482,7 @@ rfMag(FEngine &engine, double rad)
 		engine.saveVector(buf, Cmat[n]);
 	}
 
-	ierr = VecDestroyVecs(Cmat, num_bsens);
+	ierr = VecDestroyVecs(num_bsens, &Cmat);
 	CHKERRQ(ierr);
 
 	return 0;
@@ -521,7 +530,7 @@ main(int argc, char **argv)
 
 	int ierr;
 
-	PetscTruth t, sflag, bsflag, rfpflag, rfmflag;
+	PetscBool t, sflag, bsflag, rfpflag, rfmflag, cgflag;
 	PetscInt cmax;
 
 	PetscInitialize(&argc, &argv, NULL, help);
@@ -535,7 +544,7 @@ main(int argc, char **argv)
 	}
 
 	if ((mpath = strdup(buf)) == NULL) {
-		SETERRQ (PETSC_ERR_MEM, "strdup mpath");
+		SETERRQ (PETSC_COMM_SELF, PETSC_ERR_MEM, "strdup mpath");
 	}
 
 	cmax = MAX_COND; /* maximum 100 distinct conductivity labels supported */
@@ -549,19 +558,24 @@ main(int argc, char **argv)
 			char *ep = NULL;
 			unsigned long ix = strtoul(p, &ep, 10);
 			if (p == ep || ix <= 0 || ix > MAX_COND)
-				SETERRQ (PETSC_ERR_MEM, "invalid conductivity index");
+				SETERRQ (PETSC_COMM_SELF, PETSC_ERR_MEM, "invalid conductivity index");
 			if (*ep != '=')
-				SETERRQ (PETSC_ERR_MEM, "expected =");
+				SETERRQ (PETSC_COMM_SELF, PETSC_ERR_MEM, "expected =");
 			p = ep + 1;
 
 			double v = strtod(p, &ep);
 			if (p == ep || *ep != '\0' || v < 0)
-				SETERRQ (PETSC_ERR_MEM, "invalid conductivity value");
+				SETERRQ (PETSC_COMM_SELF, PETSC_ERR_MEM, "invalid conductivity value");
 			if (cmap.size() < ix)
 				cmap.resize(ix, -1);
 			cmap[ix - 1] = v;
 		}
 	}
+
+	ierr = PetscOptionsGetBool(PETSC_NULL, "-cgroup", &cgflag, &t);
+	CHKERRQ(ierr);
+	if (t == PETSC_FALSE)
+		cgflag = PETSC_FALSE;
 
 	for (unsigned int i = 0; i < cmap.size(); i++)
 		PetscPrintf(PETSC_COMM_WORLD, "%d = %g\n", i, cmap[i]);
@@ -578,6 +592,8 @@ main(int argc, char **argv)
 		CHKERRQ(ierr);
 	}
 
+
+
 	/* Print Mesh info */
 	PetscPrintf(PETSC_COMM_WORLD, "Mesh initialized\n");
 	PetscPrintf(PETSC_COMM_WORLD, "  %d nodes, %d elements\n",
@@ -593,7 +609,7 @@ main(int argc, char **argv)
 	
 	if (t) {
 		if ((dfn = strdup(buf)) == NULL) {
-			SETERRQ (PETSC_ERR_MEM, "strdup mpath");
+			SETERRQ (PETSC_COMM_SELF, PETSC_ERR_MEM, "strdup dfn");
 		}
 		mprintf("Reading dipoles from %s\n", dfn);
 		dipoles = MeshUtil::readDipoles(dfn, num_dipoles,
@@ -608,7 +624,7 @@ main(int argc, char **argv)
 	
 	if (t) {
 		if ((mfn = strdup(buf)) == NULL) {
-			SETERRQ (PETSC_ERR_MEM, "strdup mpath");
+			SETERRQ (PETSC_COMM_SELF, PETSC_ERR_MEM, "strdup mfn");
 		}
 		bsensors = ReadMagSensors(mfn, num_bsens);
 		if (bsensors == NULL || num_bsens < 1) {
@@ -625,7 +641,7 @@ main(int argc, char **argv)
 
 	if (t) {
 		if ((sfn = strdup(buf)) == NULL) {
-			SETERRQ (PETSC_ERR_MEM, "strdup sfn");
+			SETERRQ (PETSC_COMM_SELF, PETSC_ERR_MEM, "strdup sfn");
 		}
 		
 		mprintf("Reading sensors from %s\n", sfn);
@@ -644,22 +660,22 @@ main(int argc, char **argv)
 	FEngine *eng = new FEngine(PETSC_COMM_WORLD, *msh);
 	
 	
-	ierr = PetscOptionsGetTruth(PETSC_NULL, "-sens", &sflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, "-sens", &sflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		sflag = PETSC_FALSE;
 	
-	ierr = PetscOptionsGetTruth(PETSC_NULL, "-bsens", &bsflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, "-bsens", &bsflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		bsflag = PETSC_FALSE;
 
-	ierr = PetscOptionsGetTruth(PETSC_NULL, "-rfpot", &rfpflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, "-rfpot", &rfpflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		rfpflag = PETSC_FALSE;
 
-	ierr = PetscOptionsGetTruth(PETSC_NULL, "-rfmag", &rfmflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, "-rfmag", &rfmflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		rfmflag = PETSC_FALSE;
@@ -675,7 +691,7 @@ main(int argc, char **argv)
 
 	try {
 		if (sflag) {
-			ierr = sens(*eng);
+			ierr = sens(*eng, cgflag ? msh : NULL);
 			CHKERRQ(ierr);
 		}
 		
@@ -710,7 +726,7 @@ main(int argc, char **argv)
 	} catch (int ier) {
 		CHKERRQ(ier);
 	} catch(...) {
-		SETERRQ(1, "Unknown exception\n");
+		SETERRQ(PETSC_COMM_SELF, 1, "Unknown exception\n");
 	}
 	
 	ierr = PetscFinalize();

@@ -185,7 +185,7 @@ class FEngine {
 	int calcMagSecMat(int numsens, const point *sens, Vec *vec[]);
 	int calcMagSecMat(int numsens, const point *sens, Vec vec[]);
 
-	int saveSensMatDip(const char *fnbase, const Vec *Ainv, int nAinv);
+	int saveSensMatDip(const char *fnbase, const Vec *Ainv, int nAinv, int ngroup);
 	int saveMagSensMatDip(const char *fnbase, const Vec *Cmat,
 			      int ns, const point *sens);
 
@@ -218,7 +218,7 @@ class FEngine {
 	int addMagSecondary(const point sens, const Vec phi, Vec *dm,
 			    double Bs[3]);
 
-	int sensMatrix(gzFile fd, const Vec *Ainv, int nAinv);
+	int sensMatrix(gzFile fd, const Vec *Ainv, int nAinv, int ngroup);
 	int sensMatrixMag(gzFile fd, const Vec *Cmat,
 			  int ns, const point *sens);
 

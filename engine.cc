@@ -75,7 +75,7 @@ RHSVec::RHSVec(MPI_Comm comm, int gsize, int lsize)
 //---------------------------------------------------------------------------
 RHSVec::~RHSVec()
 {
-	int ierr = VecDestroy(m_vec);
+	int ierr = VecDestroy(&m_vec);
 	CHKERRCONTINUE(ierr);
 	if (ierr)
 		throw(ierr);
@@ -126,7 +126,7 @@ FEngine::solveMag(int numsens, const point *sens)
 		Br += 6;
 	}
 
-	ierr = VecDestroyVecs(dm, 3);
+	ierr = VecDestroyVecs(3, &dm);
 	CHKERRCONTINUE(ierr);
 	if (ierr)
 		return NULL;
@@ -302,7 +302,7 @@ int
 FEngine::getVectors(int nvec, Vec *vec[])
 {
 	if(nvec  < 1 || vec == NULL)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid argument\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid argument\n");
 
 	int ierr = VecDuplicateVecs(m_phi, nvec, vec);
 	CHKERRQ(ierr);
@@ -314,7 +314,7 @@ int
 FEngine::clearVectors(int nvec, Vec vec[])
 {
 	if(nvec  < 1 || vec == NULL)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid argument\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid argument\n");
 
 	for (int n = 0; n < nvec; n++) {
 		int ierr = VecSet(vec[n], 0);
@@ -328,7 +328,7 @@ int
 FEngine::calcMagSecMat(int numsens, const point *sens, Vec *vec[])
 {
 	if(sens == NULL || numsens < 1)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid argument\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid argument\n");
 
 	int ierr = VecDuplicateVecs(m_phi, 3 * numsens, vec);
 	CHKERRQ(ierr);
@@ -344,7 +344,7 @@ FEngine::calcMagSecMat(int numsens, const point *sens, Vec *Cmat)
 	int nvec = 3 * numsens;
       
 	if(sens == NULL || numsens < 1)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid argument\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid argument\n");
 
 	mprintf("Computing C matrix with %d columns\n", nvec);
 
@@ -372,7 +372,7 @@ FEngine::calcMagSecMat(int numsens, const point *sens, Vec *Cmat)
 
 			if (shape->MagSec(parray, sens[s], m_mesh->getSigmaE(n)
 					  * M_MU04PI, dx, dy, dz)){
-				SETERRQ1(PETSC_ERR_LIB, "Error calculating"
+				SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_LIB, "Error calculating"
 					"sec. mag. field entry %d!\n",n);
 			}
 
@@ -463,7 +463,7 @@ FEngine::saveVector(const char *fn, const Vec vec)
 
 	ierr = VecDuplicate(vec, &vr);
 	CHKERRQ(ierr);
-	ierr = ISCreateGeneral(m_comm, m_nNodes, m_ordering, &is1);
+	ierr = ISCreateGeneral(m_comm, m_nNodes, m_ordering, PETSC_COPY_VALUES, &is1);
 	CHKERRQ(ierr);
 	ierr = ISCreateStride(m_comm, m_nNodes, 0, 1, &is2);
 	CHKERRQ(ierr);
@@ -475,7 +475,7 @@ FEngine::saveVector(const char *fn, const Vec vec)
 	CHKERRQ(ierr);
 	ierr = VecScatterEnd(vs, vec, vr, INSERT_VALUES, SCATTER_FORWARD);
 	CHKERRQ(ierr);
-	ierr = VecScatterDestroy(vs);
+	ierr = VecScatterDestroy(&vs);
 	CHKERRQ(ierr);
 
 	PetscViewer viewer;
@@ -489,14 +489,14 @@ FEngine::saveVector(const char *fn, const Vec vec)
 	ierr = VecView(vr, viewer);
 	CHKERRQ(ierr);
 
-	PetscViewerDestroy(viewer);
+	PetscViewerDestroy(&viewer);
 	CHKERRQ(ierr);
 
-	ierr = VecDestroy(vr);
+	ierr = VecDestroy(&vr);
 	CHKERRQ(ierr);
-	ierr = ISDestroy(is1);
+	ierr = ISDestroy(&is1);
 	CHKERRQ(ierr);
-	ierr = ISDestroy(is2);
+	ierr = ISDestroy(&is2);
 	CHKERRQ(ierr);
 
 	return 0;
@@ -759,8 +759,8 @@ FEngine::FEngine(MPI_Comm comm, FEMesh &msh)
 //---------------------------------------------------------------------------
 FEngine::~FEngine()
 {
-	MatDestroy(m_A);
-	KSPDestroy(m_ksp);
+	MatDestroy(&m_A);
+	KSPDestroy(&m_ksp);
 	delete m_ordering;
 	delete m_revorder;
 	delete m_rhs;
@@ -1021,13 +1021,13 @@ int
 FEngine::writeDipoleInfo(FILE *fi, int num, const DInfo *dip)
 {
 	if (num < 1)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid dipole count\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid dipole count\n");
 
 	if (m_rank != 0)
 		return 0;
 
 	if (fi == NULL)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "invalid file pointer\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "invalid file pointer\n");
 	
 	fprintf(fi,"%d 0 %d dipoles\n", m_infoseq++, num);
 	
@@ -1047,12 +1047,12 @@ FEngine::writeDipoleInfo(FILE *fi, int num, const DInfo *dip)
 //---------------------------------------------------------------------------
 // slow? (serial code)
 int
-FEngine::sensMatrix(gzFile fd, const Vec *Ainv, int nAinv)
+FEngine::sensMatrix(gzFile fd, const Vec *Ainv, int nAinv, int ngroup)
 {
 	int ierr;
 	if (m_rank == 0) {
 		if (fd == NULL)
-			SETERRQ(PETSC_ERR_ARG_OUTOFRANGE,
+			SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE,
 				"Invalid file pointer");
 	}
 
@@ -1061,6 +1061,7 @@ FEngine::sensMatrix(gzFile fd, const Vec *Ainv, int nAinv)
 
 	int ne = numElements();
 	int nn = numNodes();
+	int ng = (ngroup > 0) ? ngroup : ne;
 
 	point parray[NUM_NODES];
 	DFSMatrix mat(nnodes);
@@ -1096,8 +1097,8 @@ FEngine::sensMatrix(gzFile fd, const Vec *Ainv, int nAinv)
 	CHKERRQ(ierr);
 
 	// this is the output row of the sensitivity matrix
-	double *smrow = new double[ne];
-	double *rsmrow = new double[ne];
+	double *smrow = new double[ng];
+	double *rsmrow = new double[ng];
 	
 	for (int row = 0; row < nAinv; row++) {
 		// scatter col'th column of Ainv
@@ -1112,17 +1113,29 @@ FEngine::sensMatrix(gzFile fd, const Vec *Ainv, int nAinv)
 		ierr = VecGetArray(l_Ainv, &az);
 		CHKERRQ(ierr);
 
-		memset(smrow, 0, ne * sizeof(double));
+		memset(smrow, 0, ng * sizeof(double));
+
+		int *sigcls = m_mesh->getSigmaEcls();
 
 		for (int n = 0; n < ne; n++) {
+			int ni;
 			if (m_mesh->getElemClass(n) != m_rank)
 				continue;			
+
+			if (ngroup > 0) {
+				ni =sigcls[n];
+				if (ni < 1 || ni > ngroup)
+					SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_LIB,
+					    "Error in sigma for element %d\n", n);
+				ni = ni - 1;
+			} else
+				ni = n;
 
 			mesh2Mat(nnodes, *m_mesh->getElem(n), idx);
 			m_mesh->pArray(n, parray);
 		
 			if(shape->Matrix(parray, 1, mat, 0)){
-				SETERRQ1(PETSC_ERR_LIB,
+				SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_LIB,
 					 "Error calculating entry %d!\n",n);
 			}
 
@@ -1137,16 +1150,16 @@ FEngine::sensMatrix(gzFile fd, const Vec *Ainv, int nAinv)
 			}
 
 			for (int i = 0; i < nnodes; i++)
-				smrow[n] += ay[i] * az[idx[i]];
+				smrow[ni] += ay[i] * az[idx[i]];
 		}
 		ierr = VecRestoreArray(l_Ainv, &az);
 		CHKERRQ(ierr);
 
-		MPI_Reduce(smrow, rsmrow, ne, MPI_DOUBLE, MPI_SUM, 0, m_comm);
+		MPI_Reduce(smrow, rsmrow, ng, MPI_DOUBLE, MPI_SUM, 0, m_comm);
 
 		if (m_rank == 0) {
 			gzprintf(fd, "%d", row);
-			for (int n = 0; n < ne; n++)
+			for (int n = 0; n < ng; n++)
 				gzprintf(fd, " %g", rsmrow[n]);
 			gzprintf(fd, "\n");
 		}
@@ -1155,14 +1168,14 @@ FEngine::sensMatrix(gzFile fd, const Vec *Ainv, int nAinv)
 	ierr = VecRestoreArray(l_phi, &ax);
 	CHKERRQ(ierr);
 
-	ierr = VecScatterDestroy(ctx);
+	ierr = VecScatterDestroy(&ctx);
 	CHKERRQ(ierr);
-	ierr = ISDestroy(is);
+	ierr = ISDestroy(&is);
 	CHKERRQ(ierr);
 
-	ierr = VecDestroy(l_phi);
+	ierr = VecDestroy(&l_phi);
 	CHKERRQ(ierr);
-	ierr = VecDestroy(l_Ainv);
+	ierr = VecDestroy(&l_Ainv);
 	CHKERRQ(ierr);
 
 	delete[] smrow;
@@ -1184,7 +1197,7 @@ FEngine::invertSensCols(int numsens, const int *sens, Vec *vec[])
 	int ierr;
 
 	if (sens == NULL || numsens <= 0 || numsens > m_nNodes)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid arguments");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid arguments");
 
 	ierr = VecDuplicateVecs(m_phi, numsens, vec);
 	CHKERRQ(ierr);
@@ -1232,7 +1245,7 @@ FEngine::invertSensCols(int numsens, const point *sens, Vec *vec[])
 	double wts[NUM_NODES];
 
 	if (sens == NULL || numsens <= 0 || numsens > m_nNodes)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid arguments");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid arguments");
 
 	nel = m_mesh->numNodeElem();
 
@@ -1415,7 +1428,7 @@ FEngine::computeMagLead (int numsens, const point *sloc,
 	MDipole mdip;
 
 	if (sloc == NULL || sdir == NULL || numsens <= 0 || numsens > m_nNodes)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid arguments");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid arguments");
 
 	ierr = VecDuplicateVecs(m_phi, numsens, vec);
 	CHKERRQ(ierr);
@@ -1448,7 +1461,7 @@ FEngine::computeMagLead (int numsens, const point *sloc,
 			m_mesh->pArray(e, parray);
 
 			if(shape->BoundSCB(computeVecPotCB, parray, r, &mdip))
-				SETERRQ(1, "Failed to compute rhs ");
+				SETERRQ(PETSC_COMM_SELF, 1, "Failed to compute rhs ");
 			
 			mesh2Mat(nnodes, *m_mesh->getElem(e), idx);
 
@@ -1487,7 +1500,7 @@ FEngine::solvePot(Vec *C, int nvec)
 	int ierr, its = 0;
 
 	if (C == NULL)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid Vector array");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid Vector array");
 
 	mprintf("Solving for %d columns\n", nvec);
 
@@ -1510,18 +1523,18 @@ FEngine::solvePot(Vec *C, int nvec)
 // XXX save it as binary ?
 
 int
-FEngine::saveSensMatDip(const char *fnbase, const Vec *Ainv, int nAinv)
+FEngine::saveSensMatDip(const char *fnbase, const Vec *Ainv, int nAinv, int ngroup)
 {
 	int ierr;
 
 	if (fnbase == 0)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "invalid base filename");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "invalid base filename");
 
 	int len = strlen(fnbase);
 
 #define LEN_INC 16
 	if (len <0 || len + LEN_INC >= PATH_MAX)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "filename too long\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "filename too long\n");
 
 	len +=LEN_INC;
 
@@ -1533,14 +1546,15 @@ FEngine::saveSensMatDip(const char *fnbase, const Vec *Ainv, int nAinv)
 	if (m_rank == 0) {
 		fd = gzopen(buf, "wt9");
 		if (fd == NULL)
-			SETERRQ1(PETSC_ERR_LIB,
+			SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_LIB,
 				 "Failed to open output file %s\n", buf);
 	}
 
 	t_diff->start();
 	mprintf("Calculating sensitivity matrix rows\n");
 
-	ierr = sensMatrix(fd, Ainv, nAinv);
+	
+	ierr = sensMatrix(fd, Ainv, nAinv, ngroup);
 	CHKERRQ(ierr);
 
 	t_diff->stop();
@@ -1634,7 +1648,7 @@ FEngine::sensMatrixMag(gzFile fd, const Vec *Cmat, int ns, const point *sens)
 			m_mesh->pArray(n, parray);
 		
 			if(shape->Matrix(parray, 1, mat, 0)){
-				SETERRQ1(PETSC_ERR_LIB,
+				SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_LIB,
 					 "Error calculating entry %d!\n",n);
 			}
 
@@ -1694,15 +1708,15 @@ FEngine::sensMatrixMag(gzFile fd, const Vec *Cmat, int ns, const point *sens)
 	ierr = VecRestoreArray(l_phi, &ax);
 	CHKERRQ(ierr);
 
-	ierr = VecScatterDestroy(ctx);
+	ierr = VecScatterDestroy(&ctx);
 	CHKERRQ(ierr);
-	ierr = ISDestroy(is);
+	ierr = ISDestroy(&is);
 	CHKERRQ(ierr);
 	
-	ierr = VecDestroy(l_phi);
+	ierr = VecDestroy(&l_phi);
 	CHKERRQ(ierr);
 
-	ierr = VecDestroyVecs(l_sens, 3);
+	ierr = VecDestroyVecs(3, &l_sens);
 	CHKERRQ(ierr);
 
 	delete[] smrow;
@@ -1735,7 +1749,7 @@ FEngine::saveMagSensMatDip(const char *fnbase, const Vec *Cmat,
 	if (m_rank == 0) {
 		fd = gzopen(buf, "wt9");
 		if (fd == NULL)
-			SETERRQ1(PETSC_ERR_LIB,
+			SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_LIB,
 				 "Failed to open output file %s\n", buf);
 	}
 	t_diff->start();
@@ -2037,7 +2051,7 @@ FEngine::PartitionElements(void)
 	//             the new processor it is assigned to
 	ierr = MatPartitioningApply(part, &isnewproc);
 	CHKERRQ(ierr);
-	ierr = MatPartitioningDestroy(part);
+	ierr = MatPartitioningDestroy(&part);
 	CHKERRQ(ierr);
 	
 	// isall - gather all IS vectors XXX this wastes space but
@@ -2061,11 +2075,11 @@ FEngine::PartitionElements(void)
 	ierr = ISRestoreIndices(istotal, &idx);
 	CHKERRQ(ierr);
 
-	ierr = ISDestroy(istotal);
+	ierr = ISDestroy(&istotal);
 	CHKERRQ(ierr);
-	ierr = ISDestroy(isnewproc);
+	ierr = ISDestroy(&isnewproc);
 	CHKERRQ(ierr);
-	ierr = MatDestroy(Adj);
+	ierr = MatDestroy(&Adj);
 	CHKERRQ(ierr);
 	return 0;
 }
@@ -2145,7 +2159,7 @@ EShellMat::EShellMat(MPI_Comm comm, int nnodes, int mloc, int nloc):
 }//---------------------------------------------------------------------------
 EShellMat::~EShellMat()
 {
-	MatDestroy(m_mat);
+	MatDestroy(&m_mat);
 	delete[] m_idx;
 	delete[] m_tmp;
 	delete m_emat;
@@ -2164,7 +2178,7 @@ EShellMat::Mult(Mat mat, Vec x, Vec y)
 	CHKERRQ(ierr);
 
 	if (me == NULL)
-		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid class pointer");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid class pointer");
 
 	ierr = VecGetArray(x, &ax);
 	CHKERRQ(ierr);
@@ -2178,26 +2192,26 @@ EShellMat::Mult(Mat mat, Vec x, Vec y)
 
 #ifdef MULT_SANITY_CHECK
 	if (idx == NULL)
-		SETERRQ(PETSC_ERR_ARG_CORRUPT, "Invalid index pointer\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_CORRUPT, "Invalid index pointer\n");
 
 	if (ay == NULL)
-		SETERRQ(PETSC_ERR_ARG_CORRUPT, "Invalid temp pointer\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_CORRUPT, "Invalid temp pointer\n");
 
 	if (ay == NULL)
-		SETERRQ(PETSC_ERR_ARG_CORRUPT, "Invalid vector pointer\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_CORRUPT, "Invalid vector pointer\n");
 
 	if (nn != 20 && nn != 8)
-		SETERRQ(PETSC_ERR_ARG_CORRUPT, "Invalid number of nodes\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_CORRUPT, "Invalid number of nodes\n");
 
 	if (me->m_emat == NULL)
-		SETERRQ(PETSC_ERR_ARG_CORRUPT, "Invalid Matrix\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_CORRUPT, "Invalid Matrix\n");
 #endif
 
 	emat = me->m_emat->_mat;
 
 #ifdef MULT_SANITY_CHECK
 	if (emat == NULL)
-		SETERRQ(PETSC_ERR_ARG_CORRUPT, "Invalid array\n");
+		SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_CORRUPT, "Invalid array\n");
 #endif
 
  	memset(ay, 0, sizeof(double) * nn);
