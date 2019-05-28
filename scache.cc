@@ -24,7 +24,7 @@
  */
 
 #include "scache.h"
-#include <stdio.h>
+
 
 #define DIV_MIN	2
 #define DIV_MAX 64
@@ -50,10 +50,11 @@ SCache::SCache(const Point3 &origin, const Point3 &size, int div) :
 		m_step.setZ(1);
 
 	m_shash.resize(m_div * m_div * m_div);
-
+#if 0
 	printf("SCache: o(%g %g %g), st(%g %g %g)\n",
 	       m_origin.getX(), m_origin.getY(), m_origin.getZ(),
 	       m_step.getX(), m_step.getY(), m_step.getZ());
+#endif
 }
 
 // returns the grid index that contain the point
@@ -144,12 +145,12 @@ SCache::addSphere(unsigned int i, const Sphere3 &s)
 	hashSphere(s, shs);
 
 	m_spheres[i] = s;
-
+#if 0
 	if (shs.empty())
 		printf("Failed to add sphere: %d (%g %g %g / %g)\n", i,
 		       s.getCenter().getX(), s.getCenter().getY(),
 		       s.getCenter().getZ(), s.getRadius());
-
+#endif
 	for (it = shs.begin(); it != shs.end(); it++) {
 		int bucket = *it;
 //		printf("Adding sphere %d to bucket %d\n", i, bucket);
@@ -180,12 +181,12 @@ SCache::intersect(const Sphere3 &s, spset_t &sps) const
 	SCache::shset_t::iterator it;
 
 	hashSphere(s, shs);
-
+#if 0
 	if (shs.empty())
 		printf("Failed hash sphere: (%g %g %g / %g)\n",
 		       s.getCenter().getX(), s.getCenter().getY(),
 		       s.getCenter().getZ(), s.getRadius());
-
+#endif
 	for (it = shs.begin(); it != shs.end(); it++) {
 		const SCache::shset_t &spb = m_shash[*it];
 		SCache::shset_t::iterator jt;
@@ -196,10 +197,12 @@ SCache::intersect(const Sphere3 &s, spset_t &sps) const
 		for (jt = spb.begin(); jt != spb.end(); jt++) {
 			int sid = *jt;
 			const Sphere3 &se = m_spheres[sid];
+#if 0
 			if (se.getRadius() <= 0) {
 				printf("Invalid sphere %d in bucket %d\n",
 				       sid, *it);
 			}
+#endif
 			if (se.intersect(s))
 				sps.insert(sid);
 		}
