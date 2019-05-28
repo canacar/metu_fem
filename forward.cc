@@ -36,7 +36,11 @@
 int num_sens=0;
 int num_bsens = 0;
 int num_dipoles=0;
+
+/* only one of sensors and psensors will be used depending on type */
 int *sensors = NULL;
+point *psensors = NULL;
+
 DInfo *dipoles = NULL;
 point *bsensors = NULL;
 
@@ -265,17 +269,19 @@ sens(FEngine &engine)
 	char fname[PATH_MAX];
 	FILE *fi = NULL;
 
+	if ((sensors == NULL && psensors == NULL) || num_sens < 1)
+		SETERRQ(1, "no sensors\n");
+
 	ierr = engine.setupSolver();
 	CHKERRQ(ierr);
 
-	// sensors are needed in matrix order
-	int smat[num_sens];
-
-	for (int n = 0; n < num_sens; n++)
-		smat[n]=engine.mesh2Mat(sensors[n]);
-
 	Vec *Ainv = NULL;
-	ierr = engine.invertSensCols(num_sens, smat, &Ainv);
+
+	if (sensors != NULL)
+		ierr = engine.invertSensCols(num_sens, sensors, &Ainv);
+	else
+		ierr = engine.invertSensCols(num_sens, psensors, &Ainv);
+
 	CHKERRQ(ierr);
 
 	assert(Ainv != NULL);
@@ -285,7 +291,7 @@ sens(FEngine &engine)
 	} catch(...) {
 		SETERRQ(PETSC_ERR_FILE_OPEN, "Failed to open xInfo file!\n");
 	}
-	
+
 	for (int n = 0; n < num_dipoles; n++) {
 		ierr = engine.clearRHS();
 		CHKERRQ(ierr);
@@ -413,20 +419,18 @@ rfPot(FEngine &engine)
 {
 	int ierr;
 
-	if (sensors == NULL || num_sens < 1)
+	if ((sensors == NULL && psensors == NULL) || num_sens < 1)
 		SETERRQ(1, "no sensors\n");
 	
 	ierr = engine.setupSolver();
 	CHKERRQ(ierr);
 
-	// sensors are needed in matrix order
-	int smat[num_sens];
-
-	for (int n = 0; n < num_sens; n++)
-		smat[n]=engine.mesh2Mat(sensors[n]);
-
 	Vec *Ainv = NULL;
-	ierr = engine.invertSensCols(num_sens, smat, &Ainv);
+	if (sensors != NULL)
+		ierr = engine.invertSensCols(num_sens, sensors, &Ainv);
+	else
+		ierr = engine.invertSensCols(num_sens, psensors, &Ainv);
+
 	CHKERRQ(ierr);
 
 	static char buf[PATH_MAX+1];
@@ -592,7 +596,13 @@ main(int argc, char **argv)
 		sensors = MeshUtil::readSensors(sfn, num_sens,
 						msh->numNodes());
 		if (num_sens)
-			mprintf("%d Sensors loaded\n", num_sens);
+			mprintf("%d Sensor nodes loaded\n", num_sens);
+		else {
+			sensors = NULL;
+			psensors = ReadMagSensors(sfn, num_sens);
+			if (num_sens)
+				mprintf("%d Sensor coords loaded\n", num_sens);
+		}
 	}
 	
 	FEngine *eng = new FEngine(PETSC_COMM_WORLD, *msh);
@@ -652,12 +662,11 @@ main(int argc, char **argv)
 			if (num_dipoles == 0) {
 				printf("Nothing to do (no dipoles)!\n");
 				ierr = 0;
-			} else if (num_bsens == 0 ||
-				   (3 * (num_bsens + 1) <= num_dipoles)) {
-				ierr = forward(*eng);
-			} else {
+			} else if (3 * (num_bsens + 1) > num_dipoles) {
 				// do not store C, store phi instead
 				ierr = forward2(*eng);
+			} else {
+				ierr = forward(*eng);
 			}
 			CHKERRQ(ierr);
 		}

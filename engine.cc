@@ -31,6 +31,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #endif
+#include <errno.h>
 
 #include "engine.h"
 
@@ -38,7 +39,6 @@
 #include "petscao.h"
 #include "femmesh3.h"
 #include "hptimer.h"
-#include "errno.h"
 
 #ifndef _WIN32_
 extern "C" {
@@ -59,9 +59,6 @@ extern "C" {
 #endif
 }
 #endif
-
-
-//extern int errno;
 
 
 //---------------------------------------------------------------------------
@@ -520,7 +517,7 @@ FEngine::fillMatrix(void)
 	// other sigma types not supported yet
 	double *sigma = m_mesh->getSigmaE();
 	
-	int idx[nnodes];
+	int idx[NUM_NODES];
 
 	int ne = m_mesh->numElements();
 
@@ -725,6 +722,8 @@ FEngine::FEngine(MPI_Comm comm, FEMesh &msh)
 	m_nNodes = msh.numNodes();
 	m_nElements = msh.numElements();
 
+	m_weights = new double[msh.numNodeElem()];
+
 	t_create=HPTimerMgr::getTimer("Create Matrix");  
 	t_fill=HPTimerMgr::getTimer("Fill Matrix");
 	t_sync=HPTimerMgr::getTimer("Synchronize Matrix");
@@ -765,6 +764,7 @@ FEngine::~FEngine()
 	delete m_ordering;
 	delete m_revorder;
 	delete m_rhs;
+	delete m_weights;
 }
 //---------------------------------------------------------------------------
 int
@@ -1173,7 +1173,7 @@ FEngine::sensMatrix(gzFile fd, const Vec *Ainv, int nAinv)
 //---------------------------------------------------------------------------
 /* 
    for sensitivity matrix creation.
-   sensors must be in MATRIX order
+   sensors must be in MESH order
    Note instead of C * Ainv, it computes
    Ainv * Ct and returns the result as transposed matrix
    This holds since Ainv is symmetric
@@ -1199,6 +1199,73 @@ FEngine::invertSensCols(int numsens, const int *sens, Vec *vec[])
 			ierr = VecSetValues(Cmat[n], 1, &s,
 					    &one, INSERT_VALUES);
 			CHKERRQ(ierr);
+		}
+		ierr = VecAssemblyBegin(Cmat[n]);
+		CHKERRQ(ierr);
+	}
+
+	for (int n = 0; n < numsens; n++) {
+		ierr = VecAssemblyEnd(Cmat[n]);
+		CHKERRQ(ierr);
+	}
+
+	ierr = solvePot(Cmat, numsens);
+	CHKERRQ(ierr);
+
+	return 0;
+}
+//---------------------------------------------------------------------------
+/* 
+   for reciprocal field computation.
+   sensors are points on the mesh, which are converted
+   to weighted sum of node potentials.
+
+   Note instead of C * Ainv, it computes
+   Ainv * Ct and returns the result as transposed matrix
+   This holds since Ainv is symmetric
+*/
+int
+FEngine::invertSensCols(int numsens, const point *sens, Vec *vec[])
+{
+	int ierr, nel;
+
+	double wts[NUM_NODES];
+
+	if (sens == NULL || numsens <= 0 || numsens > m_nNodes)
+		SETERRQ(PETSC_ERR_ARG_OUTOFRANGE, "Invalid arguments");
+
+	nel = m_mesh->numNodeElem();
+
+	assert(NUM_NODES >= nel);
+
+	ierr = VecDuplicateVecs(m_phi, numsens, vec);
+	CHKERRQ(ierr);
+
+	Vec *Cmat = *vec;
+
+	for (int n = 0; n < numsens; n++) {
+		double x, y, z;
+		x = sens[n][0];
+		y = sens[n][1];
+		z = sens[n][2];
+
+		int elem = m_mesh->localElem(x, y, z);
+		if (elem == -1) {
+			mprintf("Sensor %d is out of mesh\n", n);
+			continue;
+		}
+
+		const node *en = m_mesh->getElem(elem);
+		m_mesh->getShape()->Weights(x, y, z, wts);
+
+		for (int m = 0; m < nel; m++) {
+			PetscInt s = mesh2Mat((*en)[m]);
+			PetscScalar w = wts[m];
+			if (s >= m_vstart && s < m_vend && fabs(w) > 0) {
+				ierr = VecSetValues(Cmat[n], 1, &s,
+						    &w, INSERT_VALUES);
+				CHKERRQ(ierr);
+			}
 		}
 		ierr = VecAssemblyBegin(Cmat[n]);
 		CHKERRQ(ierr);

@@ -181,6 +181,7 @@ class FEngine {
 	int findNode(double x, double y, double z);
 
 	int invertSensCols(int numsens, const int *sens, Vec *vec[]);
+	int invertSensCols(int numsens, const point *sens, Vec *vec[]);
 	int calcMagSecMat(int numsens, const point *sens, Vec *vec[]);
 	int calcMagSecMat(int numsens, const point *sens, Vec vec[]);
 
@@ -233,6 +234,8 @@ class FEngine {
 	FEMesh *m_mesh;		// mesh
 	RHSVec *m_rhs;		// RHS vector
 	Vec	m_phi;		// Solution vector
+
+	double *m_weights;	// Temporary storage for shape function weights
 
 	// timers - XXX replace with petsc variants
 	HPTimer *t_create, *t_fill, *t_sync, *t_fact;
