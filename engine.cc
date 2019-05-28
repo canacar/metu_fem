@@ -581,24 +581,91 @@ FEngine::findNodeLocal(double x, double y, double z)
 int
 FEngine::setupSolver(void)
 {
-	int ierr;
-	int nn = m_mesh->numNodes();
+	PetscErrorCode ierr;
+	PetscInt nn = m_mesh->numNodes();
+	PetscInt nl = PETSC_DECIDE;
+
+	int sndbuf[m_size];
+	int rcvbuf[m_size];
 
 	t_create->start();
+
 	// create matrix. let petsc decide the storage
-	ierr = MatCreateMPIAIJ(m_comm, PETSC_DECIDE, PETSC_DECIDE, nn, nn,
-			       81, PETSC_NULL, 80, PETSC_NULL, &m_A);
+	ierr = MatCreate(m_comm, &m_A);
 	CHKERRQ(ierr);
 
-	MatSetOption (m_A, MAT_SYMMETRIC, PETSC_TRUE);
-//	ierr = MatSetFromOptions(A);
+	ierr = MatSetType(m_A, MATMPIAIJ);
 	CHKERRQ(ierr);
+
+	ierr = PetscSplitOwnership(m_comm, &nl, &nn);
+
+	ierr = MatSetSizes(m_A, nl, nl, nn, nn);
+	CHKERRQ(ierr);
+
+//	ierr = MatSetFromOptions(A);
+//	CHKERRQ(ierr);
 
 	// get vector range from matrix (decided by PETSC)
-	ierr = MatGetOwnershipRange(m_A, &m_vstart, &m_vend);
-	CHKERRQ(ierr);
-	m_vsize = m_vend - m_vstart;
+	// ierr = MatGetOwnershipRange(m_A, &m_vstart, &m_vend);
+	// CHKERRQ(ierr);
 
+	memset(sndbuf, 0, sizeof(sndbuf));
+	memset(rcvbuf, 0, sizeof(sndbuf));
+
+	sndbuf[m_rank] = nl;
+	MPI_Scan(sndbuf, rcvbuf, m_size, MPI_INT, MPI_SUM, m_comm);
+
+	m_vsize = nl;
+	m_vstart = 0;
+	for (int i = 0; i < m_rank; i++)
+		m_vstart += rcvbuf[i];
+
+	m_vend = m_vstart + m_vsize;
+
+	printf("[%d] s:%d, e:%d, z:%d\n", m_rank, m_vstart, m_vend, m_vsize);
+#if 1
+	PetscInt *d_nnz, *o_nnz;
+        ierr = PetscMalloc(m_vsize * sizeof(PetscInt), &d_nnz);
+        CHKERRQ(ierr);
+        ierr = PetscMalloc(m_vsize * sizeof(PetscInt), &o_nnz);
+        CHKERRQ(ierr);
+	printf("Computing sizes\n");
+
+	// check neighbor size
+	for(int n = 0; n < m_vsize; n++) {
+		int nodes[200];
+		int nt;
+
+		d_nnz[n] = 1;
+		o_nnz[n] = 0;
+
+		nt = m_mesh->getNeighborNodes(n + m_vstart, nodes, sizeof(nodes)/sizeof(nodes[0]));
+		if (nt < 1) {
+	                SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Too many node neighbors!");
+		}
+		for (int m = 0; m < nt; m++) {
+			if (nodes[m] < m_vstart || nodes[m] >= m_vend)
+				o_nnz[n]++;
+			else
+				d_nnz[n]++;
+		}
+	}
+
+	printf("Computed sizes\n");
+#endif
+//	ierr = MatMPIAIJSetPreallocation(m_A, 0, d_nnz, 0, o_nnz);
+	ierr = MatMPIAIJSetPreallocation(m_A, 81, PETSC_NULL, 80, PETSC_NULL);
+	CHKERRQ(ierr);
+
+	ierr = MatSetOption (m_A, MAT_SYMMETRIC, PETSC_TRUE);
+	CHKERRQ(ierr);
+
+#if 1
+        ierr = PetscFree(o_nnz);
+        CHKERRQ(ierr);
+        ierr = PetscFree(d_nnz);
+        CHKERRQ(ierr);
+#endif
 	// on return, msh -> element_class contains assigned processor
 	ierr = PartitionElementsSimple();
 	CHKERRQ(ierr);
@@ -663,7 +730,8 @@ FEngine::setupSolver(void)
 	// also serves as the preconditioning matrix. And our A matrix
 	// does NOT change between solutions
 
-	ierr = KSPSetOperators(m_ksp, m_A, m_A, DIFFERENT_NONZERO_PATTERN);
+//	ierr = KSPSetOperators(m_ksp, m_A, m_A, DIFFERENT_NONZERO_PATTERN);
+	ierr = KSPSetOperators(m_ksp, m_A, m_A);
 	CHKERRQ(ierr);
 
 	//  solver options (cg by default)
