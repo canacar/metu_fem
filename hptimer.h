@@ -45,18 +45,18 @@ __stdcall QueryPerformanceFrequency(LARGE_INTEGER *lpPerfCnt);
 #else
 #include <sys/time.h>
 #include <unistd.h>
+#include <stdint.h>
 
-typedef long long int __int64;
 #define MAXLONGLONG                      (0x7fffffffffffffffLL)
 typedef struct _LARGE_INTEGER {
-    __int64 QuadPart;
+    int64_t QuadPart;
 } LARGE_INTEGER;
 extern "C"{
 	extern struct timeval _hpt_tval;
 	extern struct timezone _hpt_tzone;
 	inline int QueryPerformanceCounter(LARGE_INTEGER *lpPerfCnt){
 		gettimeofday(&_hpt_tval, &_hpt_tzone);
-		lpPerfCnt->QuadPart=(__int64)_hpt_tval.tv_sec*(__int64)1000000+(__int64)_hpt_tval.tv_usec;
+		lpPerfCnt->QuadPart=(int64_t)_hpt_tval.tv_sec*(int64_t)1000000+(int64_t)_hpt_tval.tv_usec;
 		return 1;
 	}
 	inline int QueryPerformanceFrequency(LARGE_INTEGER *lpPerfCnt){
@@ -79,7 +79,7 @@ public:
         static void report(char *str, int len);
 
         inline int isOK(void){return m_freq!=0;}
-        inline __int64 getFrequency(void){return m_freq;}
+        inline int64_t getFrequency(void){return m_freq;}
         inline HPTimer *getFirst(void){return m_root;}
 
         static char *dispFreq(double t);
@@ -92,7 +92,7 @@ private:
         void addTimer(HPTimer *t);
         void removeTimer(HPTimer *t); // called by timer destructor
 
-        __int64 m_freq;
+        int64_t m_freq;
         HPTimer *m_root, *m_end; // so that we can add to the end of list
 };
 
@@ -116,9 +116,9 @@ public:
         int report(char *buf, int len);
 
         inline int getCount(void){return m_count;}
-        inline __int64 getTotal(void){return m_total;}
-        inline __int64 getMin(void){return m_min;}
-        inline __int64 getMax(void){return m_max;}
+        inline int64_t getTotal(void){return m_total;}
+        inline int64_t getMin(void){return m_min;}
+        inline int64_t getMax(void){return m_max;}
 
         inline double getTotalSec(void){
                 return m_parent->m_freq ? ((double)m_total/(double)m_parent->m_freq):0;}
@@ -133,7 +133,7 @@ public:
 private:
         // timer data
         LARGE_INTEGER m_start, m_stop;
-        __int64 m_cur, m_min, m_max, m_total;
+        int64_t m_cur, m_min, m_max, m_total;
         int m_count;
         char m_name[HPT_NAME_LEN];
 
