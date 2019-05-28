@@ -1,0 +1,23 @@
+This package is part of the EMSI Tools Package developed at the
+Brain Research Laboratory, Middle East Technical University
+Department of Electrical and Electronics Engineering.
+
+The METU-FEM forward problem solver uses PETSc library as a
+parallel high performance sparse solver. The latest version
+of PETSc at the time of writing is 2.3.3p15 and can be obtained
+from: http://www.mcs.anl.gov/petsc/
+
+
+Compiling:
+
+1. Make sure that PETSc is installed and the PETSC_DIR
+   environment variable is set properly.
+
+2. Run 'make' or 'gmake' under the project directory.
+
+
+For more information please refer to the project homepage at:
+http://www.eee.metu.edu.tr/metu-fp/
+
+
+$Id: README,v 1.2 2008/11/24 04:46:57 canacar Exp $
