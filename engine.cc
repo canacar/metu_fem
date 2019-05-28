@@ -480,10 +480,7 @@ FEngine::saveVector(const char *fn, const Vec vec)
 
 	PetscViewer viewer;
 
-	ierr = PetscViewerASCIIOpen(m_comm, fn, &viewer);
-	CHKERRQ(ierr);
-
-	ierr = PetscViewerSetFormat(viewer, PETSC_VIEWER_ASCII_COMMON);
+	ierr = PetscViewerBinaryOpen(m_comm, fn, FILE_MODE_WRITE, &viewer);
 	CHKERRQ(ierr);
 
 	ierr = VecView(vr, viewer);
@@ -589,7 +586,21 @@ FEngine::setupSolver(void)
 	int rcvbuf[m_size];
 
 	t_create->start();
+#if 1
+	// create matrix. let petsc decide the storage
+	ierr = MatCreateAIJ(m_comm, PETSC_DECIDE, PETSC_DECIDE, nn, nn,
+			       81, PETSC_NULL, 80, PETSC_NULL, &m_A);
+	CHKERRQ(ierr);
 
+	MatSetOption (m_A, MAT_SYMMETRIC, PETSC_TRUE);
+//	ierr = MatSetFromOptions(A);
+	CHKERRQ(ierr);
+
+	// get vector range from matrix (decided by PETSC)
+	ierr = MatGetOwnershipRange(m_A, &m_vstart, &m_vend);
+	CHKERRQ(ierr);
+	m_vsize = m_vend - m_vstart;
+#else	
 	// create matrix. let petsc decide the storage
 	ierr = MatCreate(m_comm, &m_A);
 	CHKERRQ(ierr);
@@ -623,7 +634,7 @@ FEngine::setupSolver(void)
 	m_vend = m_vstart + m_vsize;
 
 	printf("[%d] s:%d, e:%d, z:%d\n", m_rank, m_vstart, m_vend, m_vsize);
-#if 1
+
 	PetscInt *d_nnz, *o_nnz;
         ierr = PetscMalloc(m_vsize * sizeof(PetscInt), &d_nnz);
         CHKERRQ(ierr);
@@ -652,7 +663,7 @@ FEngine::setupSolver(void)
 	}
 
 	printf("Computed sizes\n");
-#endif
+
 //	ierr = MatMPIAIJSetPreallocation(m_A, 0, d_nnz, 0, o_nnz);
 	ierr = MatMPIAIJSetPreallocation(m_A, 81, PETSC_NULL, 80, PETSC_NULL);
 	CHKERRQ(ierr);
@@ -660,7 +671,7 @@ FEngine::setupSolver(void)
 	ierr = MatSetOption (m_A, MAT_SYMMETRIC, PETSC_TRUE);
 	CHKERRQ(ierr);
 
-#if 1
+
         ierr = PetscFree(o_nnz);
         CHKERRQ(ierr);
         ierr = PetscFree(d_nnz);
@@ -2180,14 +2191,9 @@ FEngine::PartitionElementsSimple(void)
 		Eend += elempart[n];
 	}
 
-	for (int n = 1; n <= m_rank; n++) {
-		Estart = Eend;
-		Eend += elempart[n];
-	}
-
 //	PetscPrintf(m_comm,
 	printf(
-		"[%d] Using %d elements from %d to %d\n",
+		"[%d] Using %d elements from: %d to %d\n",
 		m_rank, Esize, Estart, Eend);
 
 	for (int n = 1; n < m_size; n++)

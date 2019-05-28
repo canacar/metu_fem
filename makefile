@@ -2,7 +2,7 @@
 # make file based on minimum given in the PetSc manual
 
 ALL: forward
-CFLAGS = -g -Wall -Wshadow 
+CFLAGS = -O3 -Wall -Wshadow 
 FFLAGS =
 CPPFLAGS =
 FPPFLAGS =
@@ -14,8 +14,8 @@ FORWARD_SRC = forward.cc shape.cc shape8.cc shape20.cc dmatrix.cc \
 FORWARD_OBJ = ${FORWARD_SRC:cc=o}
 
 #include ${PETSC_DIR}/bmake/common/base
-include ${PETSC_DIR}/conf/variables
-include ${PETSC_DIR}/conf/rules
+include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${PETSC_DIR}/lib/petsc/conf/rules
 
 forward: ${FORWARD_OBJ} chkopts
 	${CLINKER} -g -L/usr/local/lib -o $@ ${FORWARD_OBJ} ${PETSC_LIB} -lz

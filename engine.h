@@ -246,8 +246,8 @@ class FEngine {
 	Mat         m_A;        // linear system matrix
 	KSP         m_ksp;     // linear solver context
 
-	int	   *m_ordering;	// ordering vector derived from AO
-	int	   *m_revorder;	// reverse ordering vector derived from AO
+	PetscInt   *m_ordering;	// ordering vector derived from AO
+	PetscInt   *m_revorder;	// reverse ordering vector derived from AO
 	
 	MPI_Comm m_comm;	// MPI communicator
 	int m_rank, m_size;	// processor rank and # of processors
