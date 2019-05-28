@@ -6,7 +6,7 @@
 #define DIV_MAX 64
 
 SCache::SCache(const Point3 &origin, const Point3 &size, int div) :
-	m_origin(origin), m_div(div), m_step(size)
+	m_div(div), m_origin(origin), m_step(size)
 {
 	if (m_div < DIV_MIN)
 		m_div = DIV_MIN;
