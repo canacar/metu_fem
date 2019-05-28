@@ -361,6 +361,8 @@ FEMesh::FEMesh()
     m_nnface = 0;
     m_nfelem = 0;
     m_meshfn = NULL;
+//    m_estore = NULL;
+    m_scache = NULL;
 }
 //---------------------------------------------------------------------------
 FEMesh::~FEMesh(void)
@@ -370,6 +372,10 @@ FEMesh::~FEMesh(void)
     if (m_shape) delete m_shape;
     if (m_meshfn != NULL)
 	    free(m_meshfn);	// allocated by strdup
+//    if (m_estore != NULL)
+//	    delete m_estore;	// allocated by strdup
+    if (m_scache != NULL)
+	    delete m_scache;	// allocated by strdup
 }
 //---------------------------------------------------------------------------
 int FEMesh::findNeighbor(int &ne, int &nf)
@@ -561,7 +567,7 @@ FEMesh::localCoord(int elem, double &x, double &y, double &z,
 {
     assert(elem>=0 && elem<m_nelem);
 
-    static point pa[NUM_NODES];
+    point pa[NUM_NODES];
     pArray(elem,pa);
 
     double i=0, j=0, k=0;
@@ -605,7 +611,7 @@ FEMesh::localCoord(int elem, double &x, double &y, double &z,
 
 	    // compute jacobian
 	    if (m_shape->jacob(pa, i, j, k, J, IJ)) {
-		    printf("Error computing Jacobian!\n");
+		    fprintf(stderr, "Error computing Jacobian!\n");
 		    break;
 	    }
 
@@ -636,25 +642,125 @@ FEMesh::localCoord(int elem, double &x, double &y, double &z,
 
     return ret;
 }
+
+//---------------------------------------------------------------------------
+void
+FEMesh::limitCoord(double &x, double &y, double &z)
+{
+	if (x > 1)
+		x = 1;
+	if (y > 1)
+		y = 1;
+	if (z > 1)
+		z = 1;
+
+	if (m_nnelem == 4) {
+		if (x < 0)
+			x = 0;
+		if (y < 0)
+			y = 0;
+		if (z < 0)
+			z = 0;
+		if ((x + y + z) > 1)
+			z = 1 - x - y;
+	} else {
+		if (x < -1)
+			x = -1;
+		if (y < -1)
+			y = -1;
+		if (z < -1)
+			z = -1;
+	}
+}
 //---------------------------------------------------------------------------
 // return the element and local coordinate for a given global coord
 // brute force for now, need better search algorithm
 int
-FEMesh::localElem(double &x, double &y, double &z) const
+FEMesh::localElem(double &x, double &y, double &z)
 {
+	int n, e0, ni;
+	int num = 0;
+	int max = 0;
+	double err, err0 = -1;
+	point pa[NUM_NODES];
+
 	Point3 p(x, y, z);
-	for (int e = 0; e < m_nelem; e++) {
-		Point3 c;
-		double r;
-		elemBoundSph(e, c, r);
-		c -= p;
-		if (c.length() > r)
-			continue;
-		p.getCoord(x, y, z);
-		if (localCoord(e, x, y, z))
-			continue;
-		return e;
+
+#if 0
+	if (m_estore == NULL) {
+		Point3 pl0, pl1;
+		getLimits(pl0, pl1);
+		m_estore = new EStore(Rect3(pl0, pl1));
+		for (n = 0; n < numElements(); n++) {
+			Point3 c;
+			double r;
+			elemBoundSph(n, c, r);
+			r *= 1.001;
+			m_->add(n, Sphere3(c, r));
+		}
 	}
+	
+	const int *el = m_estore->locate(p, num, max);
+
+	for (n = 0; n < num; n++) {
+		int e = el[n];
+#endif
+	if (m_scache == NULL) {
+		Point3 pl0, pl1;
+		getLimits(pl0, pl1);
+		m_scache = new SCache(pl0, pl1 - pl0);
+		m_scache->resize(numElements());
+
+		for (n = 0; n < numElements(); n++) {
+			Point3 c;
+			double r;
+			elemBoundSph(n, c, r);
+			r *= 1.01;
+			m_scache->addSphere(n, Sphere3(c, r));
+		}
+	}
+
+	SCache::spset_t eset;
+
+	// test sphere centered on the point
+	Sphere3 se(p, 0.001);
+
+	m_scache->intersect(se, eset);
+
+	SCache::spset_t::iterator it;
+	for (it = eset.begin(); it != eset.end(); it++) {
+		int e = *it;
+
+//	for (e = 0; e < numElements(); e++) {
+		p.getCoord(x, y, z);
+		if (!localCoord(e, x, y, z))
+			return e;
+
+		limitCoord(x, y, z);
+		pArray(e, pa);
+		m_shape->Local2Global(pa, x, y, z);
+
+		Point3 p1(x, y, z);
+		p1 -= p;
+		err =  fabs(p1.X()) + fabs(p1.Y()) + fabs(p1.Z());
+		if (err < err0 || err0 == -1) {
+			err0 = err;
+			e0 = e;
+		}
+	}
+
+	p.getCoord(x, y, z);
+	localCoord(e0, x, y, z, &err, &ni);
+	limitCoord(x, y, z);
+
+	if (err0 < 1e-3)
+		return e0;
+
+	pArray(e0, pa);
+//	m_shape->Local2Global(pa, x, y, z);
+
+	fprintf(stderr, "e: %d, err0: %g, err:%g, ni:%d, p0:<%g, %g, %g> p1:<%g, %g, %g>\n",
+		e0, err0, err, ni, p.X(), p.Y(), p.Z(), x, y, z);
 
 	return -1;
 }
@@ -808,8 +914,10 @@ int FEMesh::checkNeighbors(int el, const node *nd)
     int nnbr=0;
 
     for(int n=0; n < m_nnelem; n++){
-        if(mergeNeighborElem((*nd)[n], nbrs, nnbr, MAX_ELEM_NBR))
+        if(mergeNeighborElem((*nd)[n], nbrs, nnbr, MAX_ELEM_NBR)) {
+		fprintf(stderr, "Merge neighbor failed for node %d\n", n);
             return 1;
+        }
     }
 
     for(int n=0; n<nnbr; n++){
@@ -823,8 +931,9 @@ int FEMesh::checkNeighbors(int el, const node *nd)
 //---------------------------------------------------------------------------
 int FEMesh::addElem(const RElem &el)
 {
-    for(int n=0; n<m_nnelem; n++)
-        if(el.elem[n]<0 || el.elem[n]>=m_nnodes) return 1;
+    for (int n=0; n<m_nnelem; n++)
+        if(el.elem[n]<0 || el.elem[n]>=m_nnodes)
+	    return 1;
 
     int e1=m_nelem++;
     const node *n1=&el.elem;

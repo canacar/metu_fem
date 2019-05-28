@@ -29,6 +29,8 @@
 #include "define.h"
 #include "point3.h"
 #include "shape.h"
+//#include "estore.h"
+#include "scache.h"
 #include <vector>
 #include <deque>
 using namespace std;
@@ -49,7 +51,7 @@ struct FENeighbor{
 };
 
 // XXX need something more efficient!
-#define MAX_ELEM_NBR 200
+#define MAX_ELEM_NBR 400
 // node flags
 #define FEM_NODE_BOUND 1        // node fixed to a boundary
 #define FEM_NODE_NBCHG 2        // change in neighbor/environment
@@ -116,7 +118,7 @@ public:
     void globalCoord(int elem, double &x, double &y, double &z) const;
     int localCoord(int elem, double &x, double &y, double &z,
 		   double *err = NULL, int *ni = NULL) const;
-    int localElem(double &x, double &y, double &z) const;
+    int localElem(double &x, double &y, double &z);
     double interpField(int elem, double x, double y, double z,
 		       const double *fld);
     Point3 gradField(int elem, double x, double y, double z,
@@ -205,12 +207,15 @@ protected:
     int replaceNode(int n1, int n2);
 
     int markNeighborNodes(int nd);
+    void limitCoord(double &x, double &y, double &z);
 
     vector<FENeighbor> m_nbrs; // neighbor info
     vector<Point3> m_nodes;
     vector<RElem> m_elements;
     deque<FENodeInfo> m_ninfo;
 
+//    EStore *m_estore;
+    SCache *m_scache;
     FEShape *m_shape;
     int m_nnodes;
     int m_nelem;
