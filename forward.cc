@@ -540,14 +540,14 @@ main(int argc, char **argv)
 	char *mfn;
 	char *sfn;
 
-	int ierr;
+	PetscErrorCode ierr;
 
 	PetscBool t, sflag, bsflag, rfpflag, rfmflag, cgflag;
 	PetscInt cmax;
 
 	PetscInitialize(&argc, &argv, NULL, help);
 
-	ierr = PetscOptionsGetString(PETSC_NULL, "-m", buf, MAX_BASE, &t);
+	ierr = PetscOptionsGetString(PETSC_NULL, PETSC_NULL, "-m", buf, MAX_BASE, &t);
 	CHKERRQ(ierr);
 
 	if (!t) {
@@ -560,7 +560,7 @@ main(int argc, char **argv)
 	}
 
 	cmax = MAX_COND; /* maximum 100 distinct conductivity labels supported */
-	ierr = PetscOptionsGetStringArray(PETSC_NULL, "-c", cond, &cmax, &t);
+	ierr = PetscOptionsGetStringArray(PETSC_NULL, PETSC_NULL, "-c", cond, &cmax, &t);
 	CHKERRQ(ierr);
 
 	if (t) {
@@ -584,7 +584,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	ierr = PetscOptionsGetBool(PETSC_NULL, "-cgroup", &cgflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, PETSC_NULL, "-cgroup", &cgflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		cgflag = PETSC_FALSE;
@@ -616,7 +616,7 @@ main(int argc, char **argv)
 		    shape->numNodes(), shape->numFaces());
 	
 	// Load Dipoles
-	ierr = PetscOptionsGetString(PETSC_NULL, "-d", buf, MAX_BASE, &t);
+	ierr = PetscOptionsGetString(PETSC_NULL, PETSC_NULL, "-d", buf, MAX_BASE, &t);
 	CHKERRQ(ierr);
 	
 	if (t) {
@@ -633,7 +633,7 @@ main(int argc, char **argv)
 	}
 	
 	// Load MagSens
-	ierr = PetscOptionsGetString(PETSC_NULL, "-b", buf, MAX_BASE, &t);
+	ierr = PetscOptionsGetString(PETSC_NULL, PETSC_NULL, "-b", buf, MAX_BASE, &t);
 	CHKERRQ(ierr);
 	
 	if (t) {
@@ -650,7 +650,7 @@ main(int argc, char **argv)
 	}
 
 	/* Load sensors */
-	ierr = PetscOptionsGetString(PETSC_NULL, "-s", buf, MAX_BASE, &t);
+	ierr = PetscOptionsGetString(PETSC_NULL, PETSC_NULL, "-s", buf, MAX_BASE, &t);
 	CHKERRQ(ierr);
 
 	if (t) {
@@ -674,29 +674,29 @@ main(int argc, char **argv)
 	FEngine *eng = new FEngine(PETSC_COMM_WORLD, *msh);
 	
 	
-	ierr = PetscOptionsGetBool(PETSC_NULL, "-sens", &sflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, PETSC_NULL, "-sens", &sflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		sflag = PETSC_FALSE;
 	
-	ierr = PetscOptionsGetBool(PETSC_NULL, "-bsens", &bsflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, PETSC_NULL, "-bsens", &bsflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		bsflag = PETSC_FALSE;
 
-	ierr = PetscOptionsGetBool(PETSC_NULL, "-rfpot", &rfpflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, PETSC_NULL, "-rfpot", &rfpflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		rfpflag = PETSC_FALSE;
 
-	ierr = PetscOptionsGetBool(PETSC_NULL, "-rfmag", &rfmflag, &t);
+	ierr = PetscOptionsGetBool(PETSC_NULL, PETSC_NULL, "-rfmag", &rfmflag, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE)
 		rfmflag = PETSC_FALSE;
 		
 	// Coil Radius
 	PetscReal radius;
-	ierr = PetscOptionsGetReal(PETSC_NULL, "-r", &radius, &t);
+	ierr = PetscOptionsGetReal(PETSC_NULL, PETSC_NULL, "-r", &radius, &t);
 	CHKERRQ(ierr);
 	if (t == PETSC_FALSE || radius <= 0)
 		radius = 0.01;
